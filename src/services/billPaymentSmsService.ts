@@ -45,7 +45,8 @@ export const syncBillPaymentSMS = async (): Promise<boolean> => {
                 }
 
                 // Insert transaction
-                const transactionId = await insertRecord('transactions', {
+                const db = await getDBConnection();
+                const transactionId = await insertRecord(db, 'transactions', {
                   ...transaction,
                   createdAt: new Date().toISOString()
                 });

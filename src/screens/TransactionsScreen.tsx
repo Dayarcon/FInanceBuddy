@@ -66,7 +66,7 @@ export default function TransactionsScreen() {
     try {
       setLoading(true);
       const db = await getDBConnection();
-      const txns = await getAllTransactions(db) as Transaction[];
+      const txns = await getAllTransactions(db);
       setTransactions(txns);
       console.log(`Loaded ${txns.length} transactions`);
     } catch (error) {

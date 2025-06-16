@@ -10,10 +10,41 @@ export const getDBConnection = (): SQLite.WebSQLDatabase => {
   return dbInstance;
 };
 
-export const resetDatabase = () => {
+export const resetDatabase = async () => {
   try {
-    // Expo SQLite does not support deleteDatabaseSync yet; you may need expo-file-system for full reset.
-    console.log('Database reset not supported directly via expo-sqlite.');
+    const db = getDBConnection();
+    
+    // Drop all tables
+    await new Promise<void>((resolve, reject) => {
+      db.transaction(tx => {
+        tx.executeSql('DROP TABLE IF EXISTS transactions;', [], () => {
+          tx.executeSql('DROP TABLE IF EXISTS messages;', [], () => {
+            tx.executeSql('DROP TABLE IF EXISTS credit_card_bills;', [], () => {
+              tx.executeSql('DROP TABLE IF EXISTS credit_card_payments;', [], () => {
+                resolve();
+              }, (_, error) => {
+                reject(error);
+                return false;
+              });
+            }, (_, error) => {
+              reject(error);
+              return false;
+            });
+          }, (_, error) => {
+            reject(error);
+            return false;
+          });
+        }, (_, error) => {
+          reject(error);
+          return false;
+        });
+      });
+    });
+
+    // Recreate tables
+    await createTables();
+    
+    console.log('Database reset successfully');
   } catch (error) {
     console.error('Error resetting database:', error);
     throw error;
@@ -21,10 +52,9 @@ export const resetDatabase = () => {
 };
 
 // Helper function to execute a query and return results
-export const executeQuery = (query: string, params: SQLite.SQLStatementArg[] = []): Promise<any[]> => {
+export const executeQuery = (db: SQLite.WebSQLDatabase, query: string, params: SQLite.SQLStatementArg[] = []): Promise<any[]> => {
   return new Promise((resolve, reject) => {
     try {
-      const db = getDBConnection();
       db.transaction(tx => {
         tx.executeSql(
           query,
@@ -50,10 +80,9 @@ export const executeQuery = (query: string, params: SQLite.SQLStatementArg[] = [
 };
 
 // Helper function to insert a record
-export const insertRecord = (table: string, data: Record<string, SQLite.SQLStatementArg>): Promise<number> => {
+export const insertRecord = (db: SQLite.WebSQLDatabase, table: string, data: Record<string, SQLite.SQLStatementArg>): Promise<number> => {
   return new Promise((resolve, reject) => {
     try {
-      const db = getDBConnection();
       const columns = Object.keys(data);
       const values = Object.values(data).map(value => {
         // Ensure all values are serializable
@@ -85,10 +114,9 @@ export const insertRecord = (table: string, data: Record<string, SQLite.SQLState
 };
 
 // Helper function to update a record
-export const updateRecord = (table: string, id: number, data: Record<string, SQLite.SQLStatementArg>): Promise<void> => {
+export const updateRecord = (db: SQLite.WebSQLDatabase, table: string, id: number, data: Record<string, SQLite.SQLStatementArg>): Promise<void> => {
   return new Promise((resolve, reject) => {
     try {
-      const db = getDBConnection();
       const updates = Object.entries(data)
         .map(([key]) => `${key} = ?`)
         .join(',');
@@ -130,7 +158,7 @@ export const checkDuplicate = async (table: string, conditions: Record<string, S
     
     const query = `SELECT COUNT(*) as count FROM ${table} WHERE ${whereClause}`;
     
-    const result = await executeQuery(query, values);
+    const result = await executeQuery(getDBConnection(), query, values);
     return result[0].count > 0;
   } catch (error) {
     console.error('Error checking duplicate:', error);
@@ -141,7 +169,7 @@ export const checkDuplicate = async (table: string, conditions: Record<string, S
 // Insert transaction with proper error handling
 export const insertTransaction = async (transaction: Transaction): Promise<number> => {
   try {
-    return await insertRecord('transactions', {
+    return await insertRecord(getDBConnection(), 'transactions', {
       ...transaction,
       created_at: new Date().toISOString()
     });
@@ -152,9 +180,9 @@ export const insertTransaction = async (transaction: Transaction): Promise<numbe
 };
 
 // Get all transactions
-export const getAllTransactions = async (): Promise<Transaction[]> => {
+export const getAllTransactions = async (db: SQLite.WebSQLDatabase): Promise<Transaction[]> => {
   try {
-    const results = await executeQuery('SELECT * FROM transactions ORDER BY date DESC');
+    const results = await executeQuery(db, 'SELECT * FROM transactions ORDER BY date DESC');
     return results.map(item => ({
       id: Number(item.id),
       date: String(item.date),
@@ -377,7 +405,7 @@ export const saveTransaction = async (txn: Transaction) => {
 export const fixIncorrectTransactionTypes = async () => {
   try {
     const db = getDBConnection();
-    const transactions = await getAllTransactions();
+    const transactions = await getAllTransactions(db);
     let fixedCount = 0;
 
     for (const txn of transactions) {
@@ -431,7 +459,7 @@ export const fixIncorrectTransactionTypes = async () => {
 export const fixRecipientInformation = async () => {
   try {
     const db = getDBConnection();
-    const transactions = await getAllTransactions();
+    const transactions = await getAllTransactions(db);
     let fixedCount = 0;
 
     for (const txn of transactions) {

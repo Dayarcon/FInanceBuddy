@@ -8,6 +8,16 @@ export interface ParsedBill {
   isOverdue: boolean;
 }
 
+export interface Transaction {
+  date: string;
+  type: string;
+  amount: number;
+  party: string;
+  upi_reference: string;
+  bank: string;
+  paymentMethod: string;
+}
+
 export class MessageParserService {
   private commonBanks = [
     'HDFC Bank',
@@ -129,6 +139,79 @@ export class MessageParserService {
     return messages
       .map(message => this.parseCreditCardMessage(message))
       .filter((bill): bill is ParsedBill => bill !== null);
+  }
+
+  parseBankMessage(message: string): Transaction | null {
+    try {
+      // Extract bank name
+      const bankMatch = message.match(/(ICICI|HDFC|SBI|AXIS|KOTAK|YES)\s+BANK/i);
+      const bankName = bankMatch ? bankMatch[1].toUpperCase() : 'Unknown Bank';
+
+      // Extract transaction type
+      const isCredit = message.toLowerCase().includes('credited');
+      const isDebit = message.toLowerCase().includes('debited');
+      const type = isCredit ? 'credit' : isDebit ? 'debit' : null;
+      if (!type) return null;
+
+      // Extract amount
+      const amountMatch = message.match(/Rs\s+(\d+(?:\.\d{2})?)/);
+      if (!amountMatch) return null;
+      const amount = parseFloat(amountMatch[1]);
+
+      // Extract date
+      const dateMatch = message.match(/(\d{2})-([A-Za-z]{3})-(\d{2})/);
+      if (!dateMatch) return null;
+      const date = dateMatch[0]; // Format: DD-MMM-YY
+
+      // Extract party name
+      let party = '';
+      if (type === 'credit') {
+        const fromMatch = message.match(/from\s+([^.]+)/);
+        if (fromMatch) {
+          party = fromMatch[1].trim();
+        }
+      } else {
+        const toMatch = message.match(/;\s*([^.]+)\s+credited/);
+        if (toMatch) {
+          party = toMatch[1].trim();
+        }
+      }
+
+      // Extract UPI reference
+      const upiMatch = message.match(/UPI:(\d+)/);
+      const upi_reference = upiMatch ? upiMatch[1] : '';
+
+      return {
+        date,
+        type,
+        amount,
+        party,
+        upi_reference,
+        bank: bankName,
+        paymentMethod: 'upi'
+      };
+    } catch (error) {
+      console.error('Error parsing bank message:', error);
+      return null;
+    }
+  }
+
+  public parseMultipleTransactions(message: string): Transaction[] {
+    const transactions: Transaction[] = [];
+    
+    // Split the message into individual transaction messages
+    const transactionTexts = message.split('ICICI Bank');
+    
+    for (const text of transactionTexts) {
+      if (!text.trim()) continue;
+      
+      const transaction = this.parseBankMessage(text);
+      if (transaction) {
+        transactions.push(transaction);
+      }
+    }
+    
+    return transactions;
   }
 }
 

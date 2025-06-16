@@ -25,9 +25,10 @@ export default function SettingsScreen() {
           style: "destructive",
           onPress: async () => {
             try {
-              resetDatabase();
+              await resetDatabase();
               Alert.alert("Success", "Database reset successfully");
             } catch (error) {
+              console.error('Reset database error:', error);
               Alert.alert("Error", "Failed to reset database");
             }
           }

@@ -1,12 +1,15 @@
 import { getDBConnection, executeQuery, insertRecord, checkDuplicate } from './database';
 import { Transaction, PaymentMethod, TransactionType, extractSenderOrRecipient } from './types';
 import SmsAndroid from 'react-native-get-sms-android';
+import { MessageParserService } from './MessageParserService';
 
 type SMS = {
   body: string;
   date: number;
   address: string;
 };
+
+const messageParser = new MessageParserService();
 
 export const syncSmsTransactions = async (): Promise<{ success: boolean; count?: number; error?: string }> => {
   return new Promise((resolve) => {
@@ -56,7 +59,8 @@ export const syncSmsTransactions = async (): Promise<{ success: boolean; count?:
                 };
 
                 // Insert transaction
-                const transactionId = await insertRecord('transactions', transactionData);
+                const db = await getDBConnection();
+                const transactionId = await insertRecord(db, 'transactions', transactionData);
 
                 if (transactionId > 0) {
                   transactionCount++;
@@ -81,46 +85,25 @@ export const syncSmsTransactions = async (): Promise<{ success: boolean; count?:
 
 const parseTransactionSMS = (sms: SMS): Transaction | null => {
   const smsText = sms.body.toLowerCase();
-  console.log('SMS Text:', smsText);
-
-  // Check for credit/debit indicators
+  
+  // Extract bank name first
+  const bankName = messageParser.extractBankName(sms.body);
+  
+  // Rest of the existing parsing logic...
   const hasDebit = smsText.includes('debited') || smsText.includes('spent') || smsText.includes('paid');
   const hasCredit = smsText.includes('credited') || smsText.includes('received');
   
-  console.log('Contains \'debited\':', hasDebit);
-  console.log('Contains \'credited\':', hasCredit);
-
-  let type: TransactionType;
-  if (hasCredit) {
-    console.log('Setting type to CREDIT based on credit indicators');
-    type = 'credit';
-  } else if (hasDebit) {
-    console.log('Setting type to DEBIT based on debit indicators');
-    type = 'debit';
-  } else {
-    console.log('No clear transaction type found, defaulting to DEBIT');
-    type = 'debit';
-  }
-  console.log('Final transaction type:', type);
+  let type: TransactionType = hasCredit ? 'credit' : 'debit';
 
   // Extract amount
   const amountMatch = smsText.match(/rs\.?\s*([\d,]+\.?\d*)/i);
-  if (!amountMatch) {
-    console.log('No amount found in SMS');
-    return null;
-  }
+  if (!amountMatch) return null;
   const amount = parseFloat(amountMatch[1].replace(/,/g, ''));
-  if (isNaN(amount) || amount <= 0) {
-    console.log('Invalid amount found in SMS');
-    return null;
-  }
+  if (isNaN(amount) || amount <= 0) return null;
 
   // Extract date
   const dateMatch = smsText.match(/(\d{1,2})[-/]([a-z]+)[-/](\d{2,4})/i);
-  if (!dateMatch) {
-    console.log('No date found in SMS');
-    return null;
-  }
+  if (!dateMatch) return null;
   const [, day, month, year] = dateMatch;
   const monthIndex = getMonthIndex(month);
   const fullYear = year.length === 2 ? `20${year}` : year;
@@ -128,28 +111,63 @@ const parseTransactionSMS = (sms: SMS): Transaction | null => {
 
   // Extract payment method
   let paymentMethod: PaymentMethod = 'unknown';
-  if (smsText.includes('upi')) {
-    paymentMethod = 'upi';
-  } else if (smsText.includes('credit card')) {
-    paymentMethod = 'credit_card';
-  } else if (smsText.includes('debit card')) {
-    paymentMethod = 'debit_card';
-  } else if (smsText.includes('neft') || smsText.includes('imps')) {
-    paymentMethod = 'net_banking';
-  } else if (smsText.includes('wallet')) {
-    paymentMethod = 'wallet';
-  } else if (smsText.includes('cash')) {
-    paymentMethod = 'cash';
+  if (smsText.includes('upi')) paymentMethod = 'upi';
+  else if (smsText.includes('credit card')) paymentMethod = 'credit_card';
+  else if (smsText.includes('debit card')) paymentMethod = 'debit_card';
+  else if (smsText.includes('neft') || smsText.includes('imps')) paymentMethod = 'net_banking';
+  else if (smsText.includes('wallet')) paymentMethod = 'wallet';
+  else if (smsText.includes('cash')) paymentMethod = 'cash';
+
+  // Extract recipient/sender with improved patterns
+  let recipient: string | null = null;
+  
+  if (type === 'credit') {
+    const senderPatterns = [
+      /from\s+([a-z\s]+(?:bank|ltd|limited))/i,
+      /received\s+from\s+([a-z\s]+)/i,
+      /credited\s+by\s+([a-z\s]+)/i,
+      /sender\s*:\s*([a-z\s]+)/i
+    ];
+    
+    for (const pattern of senderPatterns) {
+      const match = sms.body.match(pattern);
+      if (match && match[1]) {
+        recipient = match[1].trim().toUpperCase();
+        break;
+      }
+    }
+  } else {
+    const recipientPatterns = [
+      /to\s+([a-z\s]+(?:bank|ltd|limited))/i,
+      /paid\s+to\s+([a-z\s]+)/i,
+      /sent\s+to\s+([a-z\s]+)/i,
+      /recipient\s*:\s*([a-z\s]+)/i
+    ];
+    
+    for (const pattern of recipientPatterns) {
+      const match = sms.body.match(pattern);
+      if (match && match[1]) {
+        recipient = match[1].trim().toUpperCase();
+        break;
+      }
+    }
   }
 
-  // Extract recipient/sender using the imported function
-  const recipient = extractSenderOrRecipient(sms.body, type);
+  // If no recipient found, try to extract from capitalized words
+  if (!recipient) {
+    const words = sms.body.split(/\s+/);
+    const capitalizedWords = words.filter(word => /^[A-Z]/.test(word));
+    if (capitalizedWords.length > 0) {
+      recipient = capitalizedWords[0];
+    }
+  }
 
   return {
     amount,
     date,
     type,
     paymentMethod,
+    account: bankName,
     recipient,
     source_sms: sms.body
   };
