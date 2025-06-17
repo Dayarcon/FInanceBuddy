@@ -16,6 +16,15 @@ export type Transaction = {
   created_at?: string;
 };
 
+export interface Message {
+  id: number;
+  message: string;
+  date: string;
+  type?: string;
+  sender?: string;
+  created_at?: string;
+}
+
 export const extractSenderOrRecipient = (smsText: string, type: TransactionType): string | null => {
   const text = smsText.toLowerCase();
   let recipient: string | null = null;
@@ -46,4 +55,36 @@ export const extractSenderOrRecipient = (smsText: string, type: TransactionType)
   }
 
   return recipient;
-}; 
+};
+
+export type CreditCardBillStatus = 'unpaid' | 'partially_paid' | 'fully_paid';
+
+export interface CreditCardBill {
+  id?: number;
+  cardNumber: string;
+  bankName: string;
+  billPeriod: string;
+  totalAmount: number;
+  minimumDue: number;
+  dueDate: string;
+  statementDate: string;
+  status: CreditCardBillStatus;
+  paidAmount: number;
+  remainingAmount: number;
+  sourceSms: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreditCardPayment {
+  id?: number;
+  cardNumber: string;
+  bankName: string;
+  paymentAmount: number;
+  paymentDate: string;
+  paymentMethod: string;
+  transactionId?: string;
+  sourceSms: string;
+  matchedBillId?: number;
+  createdAt: string;
+} 

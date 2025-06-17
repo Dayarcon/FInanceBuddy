@@ -1,6 +1,6 @@
 import { getDBConnection, executeQuery, insertRecord, checkDuplicate } from './database';
 import { Transaction, TransactionType, PaymentMethod } from '../types/transaction';
-import { SmsAndroid } from 'react-native-get-sms-android';
+import SmsAndroid from 'react-native-get-sms-android';
 
 type SMS = {
   body: string;
