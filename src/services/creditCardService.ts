@@ -1,4 +1,6 @@
-import { getDBConnection, executeQuery, insertRecord, updateRecord, checkDuplicate } from './database';
+import * as SQLite from 'expo-sqlite';
+import { getDBConnection, executeQuery, insertRecord, updateRecord, checkDuplicate, createTables } from './database';
+import { CreditCardBill, CreditCardPayment } from './types';
 
 // Types
 export type CreditCardBillStatus = 'unpaid' | 'partially_paid' | 'fully_paid';
@@ -226,12 +228,36 @@ export const insertCreditCardPayment = async (payment: CreditCardPayment): Promi
 // Get unpaid bills by card number
 export const getUnpaidBillsByCard = async (cardNumber: string): Promise<CreditCardBill[]> => {
   try {
+    const db = getDBConnection();
+    if (!db) {
+      throw new Error('Failed to connect to database');
+    }
+
+    // Ensure tables are created
+    await createTables();
+
     const query = `
       SELECT * FROM credit_card_bills 
-      WHERE cardNumber = ? AND status != 'paid'
+      WHERE cardNumber = ? AND status != 'fully_paid'
       ORDER BY dueDate ASC
     `;
-    return await executeQuery(query, [cardNumber]);
+    const results = await executeQuery(db, query, [cardNumber]);
+    return results.map(item => ({
+      id: Number(item.id),
+      cardNumber: String(item.cardNumber),
+      bankName: String(item.bankName),
+      billPeriod: String(item.billPeriod),
+      totalAmount: Number(item.totalAmount),
+      minimumDue: Number(item.minimumDue),
+      dueDate: String(item.dueDate),
+      statementDate: String(item.statementDate),
+      status: String(item.status),
+      paidAmount: Number(item.paidAmount),
+      remainingAmount: Number(item.remainingAmount),
+      sourceSms: String(item.sourceSms),
+      createdAt: String(item.createdAt),
+      updatedAt: String(item.updatedAt)
+    }));
   } catch (error) {
     console.error('Error getting unpaid bills:', error);
     throw error;
@@ -241,7 +267,14 @@ export const getUnpaidBillsByCard = async (cardNumber: string): Promise<CreditCa
 // Update bill status and paid amount
 export const updateBillStatus = async (billId: number, status: string, paidAmount: number, remainingAmount: number): Promise<void> => {
   try {
-    const db = await getDBConnection();
+    const db = getDBConnection();
+    if (!db) {
+      throw new Error('Failed to connect to database');
+    }
+
+    // Ensure tables are created
+    await createTables();
+
     await updateRecord(db, 'credit_card_bills', billId, {
       status,
       paidAmount,
@@ -255,61 +288,64 @@ export const updateBillStatus = async (billId: number, status: string, paidAmoun
 };
 
 // Match payments to bills
-export const matchPaymentsToBills = async (): Promise<number> => {
+export const matchPaymentsToBills = async (cardNumber: string): Promise<void> => {
   try {
-    const db = await getDBConnection();
-    
-    // Get all unmatched payments
-    const query = `
-      SELECT * FROM credit_card_payments 
-      WHERE matchedBillId IS NULL
-      ORDER BY paymentDate ASC
-    `;
-    const payments = await executeQuery(db, query);
-
-    let matchCount = 0;
-
-    for (const payment of payments) {
-      // Get unpaid bills for this card
-      const bills = await getUnpaidBillsByCard(payment.cardNumber);
-      
-      if (bills.length === 0) continue;
-
-      // Find the best matching bill
-      let bestMatch = null;
-      let bestScore = -1;
-
-      for (const bill of bills) {
-        const score = calculateMatchScore(payment, bill);
-        if (score > bestScore) {
-          bestScore = score;
-          bestMatch = bill;
-        }
-      }
-
-      if (bestMatch && bestScore > 0.5) {
-        // Update payment with matched bill
-        await updateRecord(db, 'credit_card_payments', payment.id, {
-          matchedBillId: bestMatch.id
-        });
-
-        // Update bill status
-        const newPaidAmount = bestMatch.paidAmount + payment.paymentAmount;
-        const newRemainingAmount = bestMatch.totalAmount - newPaidAmount;
-        const newStatus = newRemainingAmount <= 0 ? 'paid' : 'partial';
-
-        await updateBillStatus(
-          bestMatch.id,
-          newStatus,
-          newPaidAmount,
-          newRemainingAmount
-        );
-
-        matchCount++;
-      }
+    const db = getDBConnection();
+    if (!db) {
+      throw new Error('Failed to connect to database');
     }
 
-    return matchCount;
+    // Ensure tables are created
+    await createTables();
+
+    // Get all unpaid bills for this card
+    const billsQuery = `
+      SELECT * FROM credit_card_bills 
+      WHERE cardNumber = ? AND status != 'fully_paid'
+      ORDER BY dueDate ASC
+    `;
+    const bills = await executeQuery(db, billsQuery, [cardNumber]);
+
+    // Get all unmatched payments for this card
+    const paymentsQuery = `
+      SELECT * FROM credit_card_payments 
+      WHERE cardNumber = ? AND matchedBillId IS NULL
+      ORDER BY paymentDate ASC
+    `;
+    const payments = await executeQuery(db, paymentsQuery, [cardNumber]);
+
+    // Match payments to bills
+    for (const payment of payments) {
+      const paymentAmount = Number(payment.paymentAmount);
+      let remainingPaymentAmount = paymentAmount;
+
+      for (const bill of bills) {
+        if (remainingPaymentAmount <= 0) break;
+
+        const remainingBillAmount = Number(bill.remainingAmount);
+        if (remainingBillAmount <= 0) continue;
+
+        const amountToApply = Math.min(remainingPaymentAmount, remainingBillAmount);
+        const newPaidAmount = Number(bill.paidAmount) + amountToApply;
+        const newRemainingAmount = remainingBillAmount - amountToApply;
+        const newStatus = newRemainingAmount <= 0 ? 'fully_paid' : 'partially_paid';
+
+        // Update bill
+        await updateRecord(db, 'credit_card_bills', Number(bill.id), {
+          paidAmount: newPaidAmount,
+          remainingAmount: newRemainingAmount,
+          status: newStatus,
+          updatedAt: new Date().toISOString()
+        });
+
+        // Update payment with matched bill ID
+        await updateRecord(db, 'credit_card_payments', Number(payment.id), {
+          matchedBillId: Number(bill.id)
+        });
+
+        remainingPaymentAmount -= amountToApply;
+      }
+    }
   } catch (error) {
     console.error('Error matching payments to bills:', error);
     throw error;
