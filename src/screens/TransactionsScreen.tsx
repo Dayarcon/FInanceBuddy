@@ -19,7 +19,7 @@ import {
     getCategoryDefinition
 } from '../services/categoryService';
 import { getAllTransactions, getDBConnection } from '../services/database';
-import { Transaction } from '../types';
+import { Transaction } from '../types/transaction';
 
 type FilterType = 'all' | 'credit' | 'debit';
 type SortType = 'date' | 'amount' | 'bank';

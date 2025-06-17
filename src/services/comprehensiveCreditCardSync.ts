@@ -147,7 +147,7 @@ export const syncCreditCardData = async (): Promise<SyncResult> => {
           
           // Match payments to bills
           console.log('Matching payments to bills...');
-          await matchPaymentsToBills();
+          await matchPaymentsToBills(null);
           
           // Get count after matching
           const afterCount = await new Promise<any[]>((resolve, reject) => {
@@ -228,7 +228,7 @@ export const manualMatchPaymentsToBills = async (): Promise<{ success: boolean; 
     const beforeMatches = beforeCount[0]?.count || 0;
     
     // Perform matching
-    await matchPaymentsToBills();
+    await matchPaymentsToBills(null);
     
     // Get count after matching
     const afterCount = await new Promise<any[]>((resolve, reject) => {

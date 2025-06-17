@@ -1,5 +1,6 @@
 import * as SQLite from 'expo-sqlite';
-import { Transaction, PaymentMethod, extractSenderOrRecipient } from './types';
+import { Transaction, PaymentMethod, TransactionType } from '../types/transaction';
+import { extractSenderOrRecipient } from './types';
 
 let dbInstance: SQLite.WebSQLDatabase | null = null;
 
@@ -187,14 +188,15 @@ export const getAllTransactions = async (db: SQLite.WebSQLDatabase): Promise<Tra
       id: Number(item.id),
       date: String(item.date),
       amount: Number(item.amount),
-      type: String(item.type),
+      type: String(item.type) as TransactionType,
       paymentMethod: String(item.paymentMethod) as PaymentMethod,
-      account: item.account ? String(item.account) : null,
-      category: item.category ? String(item.category) : null,
-      notes: item.notes ? String(item.notes) : null,
-      source_sms: item.source_sms ? String(item.source_sms) : null,
-      recipient: item.recipient ? String(item.recipient) : null,
-      created_at: item.created_at ? String(item.created_at) : null
+      account: item.account ? String(item.account) : undefined,
+      category: item.category ? String(item.category) : undefined,
+      notes: item.notes ? String(item.notes) : undefined,
+      source_sms: item.source_sms ? String(item.source_sms) : undefined,
+      recipient: item.recipient ? String(item.recipient) : undefined,
+      createdAt: item.created_at ? String(item.created_at) : undefined,
+      updatedAt: item.updated_at ? String(item.updated_at) : undefined
     }));
   } catch (error) {
     console.error('Error in getAllTransactions:', error);

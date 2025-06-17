@@ -1,39 +1,6 @@
 import * as SQLite from 'expo-sqlite';
 import { getDBConnection, executeQuery, insertRecord, updateRecord, checkDuplicate, createTables } from './database';
-import { CreditCardBill, CreditCardPayment } from './types';
-
-// Types
-export type CreditCardBillStatus = 'unpaid' | 'partially_paid' | 'fully_paid';
-
-export interface CreditCardBill {
-  id?: number;
-  cardNumber: string; // Last 4 digits
-  bankName: string;
-  billPeriod: string; // e.g., "JUN-25"
-  totalAmount: number;
-  minimumDue: number;
-  dueDate: string; // ISO date string
-  statementDate: string; // ISO date string
-  status: CreditCardBillStatus;
-  paidAmount: number;
-  remainingAmount: number;
-  sourceSms: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CreditCardPayment {
-  id?: number;
-  cardNumber: string; // Last 4 digits
-  bankName: string;
-  paymentAmount: number;
-  paymentDate: string; // ISO date string
-  paymentMethod: string; // UPI, NEFT, etc.
-  transactionId?: string;
-  sourceSms: string;
-  matchedBillId?: number;
-  createdAt: string;
-}
+import { CreditCardBill, CreditCardPayment, CreditCardBillStatus } from './types';
 
 // Database Schema
 export const createCreditCardTables = (db: any) => {
@@ -183,7 +150,11 @@ export const parseCreditCardPayment = (sms: string): CreditCardPayment | null =>
 // Insert Credit Card Bill
 export const insertCreditCardBill = async (bill: CreditCardBill): Promise<number> => {
   try {
-    const db = await getDBConnection();
+    const db = getDBConnection();
+    if (!db) {
+      throw new Error('Failed to connect to database');
+    }
+
     // Check for duplicate bill
     const isDuplicate = await checkDuplicate('credit_card_bills', {
       cardNumber: bill.cardNumber,
@@ -195,7 +166,7 @@ export const insertCreditCardBill = async (bill: CreditCardBill): Promise<number
       return 0;
     }
 
-    return await insertRecord(db, 'credit_card_bills', bill as Record<string, SQLite.SQLStatementArg>);
+    return await insertRecord(db, 'credit_card_bills', bill as unknown as Record<string, SQLite.SQLStatementArg>);
   } catch (error) {
     console.error('Error inserting credit card bill:', error);
     throw error;
@@ -205,7 +176,11 @@ export const insertCreditCardBill = async (bill: CreditCardBill): Promise<number
 // Insert Credit Card Payment
 export const insertCreditCardPayment = async (payment: CreditCardPayment): Promise<number> => {
   try {
-    const db = await getDBConnection();
+    const db = getDBConnection();
+    if (!db) {
+      throw new Error('Failed to connect to database');
+    }
+
     // Check for duplicate payment
     const isDuplicate = await checkDuplicate('credit_card_payments', {
       cardNumber: payment.cardNumber,
@@ -218,7 +193,7 @@ export const insertCreditCardPayment = async (payment: CreditCardPayment): Promi
       return 0;
     }
 
-    return await insertRecord(db, 'credit_card_payments', payment as Record<string, SQLite.SQLStatementArg>);
+    return await insertRecord(db, 'credit_card_payments', payment as unknown as Record<string, SQLite.SQLStatementArg>);
   } catch (error) {
     console.error('Error inserting credit card payment:', error);
     throw error;
@@ -251,7 +226,7 @@ export const getUnpaidBillsByCard = async (cardNumber: string): Promise<CreditCa
       minimumDue: Number(item.minimumDue),
       dueDate: String(item.dueDate),
       statementDate: String(item.statementDate),
-      status: String(item.status),
+      status: String(item.status) as CreditCardBillStatus,
       paidAmount: Number(item.paidAmount),
       remainingAmount: Number(item.remainingAmount),
       sourceSms: String(item.sourceSms),
@@ -265,7 +240,7 @@ export const getUnpaidBillsByCard = async (cardNumber: string): Promise<CreditCa
 };
 
 // Update bill status and paid amount
-export const updateBillStatus = async (billId: number, status: string, paidAmount: number, remainingAmount: number): Promise<void> => {
+export const updateBillStatus = async (billId: number, status: CreditCardBillStatus, paidAmount: number, remainingAmount: number): Promise<void> => {
   try {
     const db = getDBConnection();
     if (!db) {
@@ -288,7 +263,7 @@ export const updateBillStatus = async (billId: number, status: string, paidAmoun
 };
 
 // Match payments to bills
-export const matchPaymentsToBills = async (cardNumber: string): Promise<void> => {
+export const matchPaymentsToBills = async (cardNumber: string | null): Promise<void> => {
   try {
     const db = getDBConnection();
     if (!db) {
@@ -298,21 +273,17 @@ export const matchPaymentsToBills = async (cardNumber: string): Promise<void> =>
     // Ensure tables are created
     await createTables();
 
-    // Get all unpaid bills for this card
-    const billsQuery = `
-      SELECT * FROM credit_card_bills 
-      WHERE cardNumber = ? AND status != 'fully_paid'
-      ORDER BY dueDate ASC
-    `;
-    const bills = await executeQuery(db, billsQuery, [cardNumber]);
+    // Get all unpaid bills
+    const billsQuery = cardNumber 
+      ? `SELECT * FROM credit_card_bills WHERE cardNumber = ? AND status != 'fully_paid' ORDER BY dueDate ASC`
+      : `SELECT * FROM credit_card_bills WHERE status != 'fully_paid' ORDER BY dueDate ASC`;
+    const bills = await executeQuery(db, billsQuery, cardNumber ? [cardNumber] : []);
 
-    // Get all unmatched payments for this card
-    const paymentsQuery = `
-      SELECT * FROM credit_card_payments 
-      WHERE cardNumber = ? AND matchedBillId IS NULL
-      ORDER BY paymentDate ASC
-    `;
-    const payments = await executeQuery(db, paymentsQuery, [cardNumber]);
+    // Get all unmatched payments
+    const paymentsQuery = cardNumber
+      ? `SELECT * FROM credit_card_payments WHERE cardNumber = ? AND matchedBillId IS NULL ORDER BY paymentDate ASC`
+      : `SELECT * FROM credit_card_payments WHERE matchedBillId IS NULL ORDER BY paymentDate ASC`;
+    const payments = await executeQuery(db, paymentsQuery, cardNumber ? [cardNumber] : []);
 
     // Match payments to bills
     for (const payment of payments) {
@@ -404,7 +375,7 @@ const createBillFromMatch = (
     minimumDue,
     dueDate,
     statementDate: now,
-    status: 'unpaid',
+    status: 'unpaid' as CreditCardBillStatus,
     paidAmount: 0,
     remainingAmount: totalAmount,
     sourceSms,
@@ -487,7 +458,11 @@ const getCurrentBillPeriod = (): string => {
 // Get all credit card bills
 export const getAllCreditCardBills = async (): Promise<CreditCardBill[]> => {
   try {
-    return await executeQuery('SELECT * FROM credit_card_bills ORDER BY dueDate DESC');
+    const db = getDBConnection();
+    if (!db) {
+      throw new Error('Failed to connect to database');
+    }
+    return await executeQuery(db, 'SELECT * FROM credit_card_bills ORDER BY dueDate DESC');
   } catch (error) {
     console.error('Error getting all credit card bills:', error);
     throw error;
@@ -497,7 +472,11 @@ export const getAllCreditCardBills = async (): Promise<CreditCardBill[]> => {
 // Get all credit card payments
 export const getAllCreditCardPayments = async (): Promise<CreditCardPayment[]> => {
   try {
-    return await executeQuery('SELECT * FROM credit_card_payments ORDER BY paymentDate DESC');
+    const db = getDBConnection();
+    if (!db) {
+      throw new Error('Failed to connect to database');
+    }
+    return await executeQuery(db, 'SELECT * FROM credit_card_payments ORDER BY paymentDate DESC');
   } catch (error) {
     console.error('Error getting all credit card payments:', error);
     throw error;

@@ -10,9 +10,7 @@ export interface Transaction {
   recipient?: string;
   bank?: string;
   account?: string;
-  category?: string;
   notes?: string;
-  party?: string;
   source_sms?: string;
   createdAt?: string;
   updatedAt?: string;
