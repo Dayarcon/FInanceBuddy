@@ -21,6 +21,13 @@ export type Category =
   | 'Salary'
   | 'Other';
 
+export type CategoryDefinition = {
+  name: Category;
+  keywords: string[];
+  color: string;
+  icon: string;
+};
+
 interface LearnedRule {
   pattern: string;
   category: Category;
@@ -34,22 +41,97 @@ interface TrainingData {
   category: Category;
 }
 
-// Rule-based categorization keywords
-export const categoryRules: Record<Category, string[]> = {
-  'Food & Dining': ['zomato', 'swiggy', 'food', 'restaurant', 'cafe', 'coffee'],
-  'Shopping': ['amazon', 'flipkart', 'myntra', 'shop', 'store', 'retail'],
-  'Transportation': ['uber', 'ola', 'metro', 'bus', 'train', 'fuel', 'petrol', 'diesel', 'rapido'],
-  'Entertainment': ['netflix', 'prime', 'hotstar', 'movie', 'theatre'],
-  'Bills & Utilities': ['electricity', 'water', 'gas', 'internet', 'mobile', 'broadband'],
-  'Health & Fitness': ['pharmacy', 'hospital', 'doctor', 'gym', 'fitness'],
-  'Travel': ['flight', 'hotel', 'booking', 'trip', 'travel'],
-  'Education': ['course', 'school', 'college', 'university', 'training'],
-  'Personal Care': ['salon', 'spa', 'beauty', 'cosmetics'],
-  'Gifts & Donations': ['gift', 'donation', 'charity'],
-  'Investments': ['stocks', 'mutual', 'fund', 'investment'],
-  'Wallet': ['paytm', 'phonepe', 'gpay', 'wallet'],
-  'Salary': ['salary', 'income', 'credit'],
-  'Other': []
+// Rule-based categorization keywords with colors and icons
+export const categoryRules: Record<Category, CategoryDefinition> = {
+  'Food & Dining': {
+    name: 'Food & Dining',
+    keywords: ['zomato', 'swiggy', 'restaurant', 'cafe', 'coffee', 'food delivery', 'food', 'dining', 'restaurant', 'cafe', 'coffee shop', 'food court'],
+    color: '#FF9800',
+    icon: 'restaurant'
+  },
+  'Shopping': {
+    name: 'Shopping',
+    keywords: ['amazon', 'flipkart', 'myntra', 'shop', 'store', 'retail', 'shopping', 'mall', 'market'],
+    color: '#9C27B0',
+    icon: 'bag-handle'
+  },
+  'Transportation': {
+    name: 'Transportation',
+    keywords: ['uber', 'ola', 'metro', 'bus', 'train', 'fuel', 'petrol', 'diesel', 'rapido', 'ride', 'transport', 'travel', 'cab', 'taxi', 'auto'],
+    color: '#2196F3',
+    icon: 'car'
+  },
+  'Entertainment': {
+    name: 'Entertainment',
+    keywords: ['netflix', 'prime', 'hotstar', 'movie', 'theatre', 'cinema', 'streaming', 'subscription'],
+    color: '#E91E63',
+    icon: 'game-controller'
+  },
+  'Bills & Utilities': {
+    name: 'Bills & Utilities',
+    keywords: ['electricity', 'water', 'gas', 'internet', 'mobile', 'broadband', 'bill', 'utility', 'payment'],
+    color: '#F44336',
+    icon: 'receipt'
+  },
+  'Health & Fitness': {
+    name: 'Health & Fitness',
+    keywords: ['pharmacy', 'hospital', 'doctor', 'gym', 'fitness', 'medical', 'health', 'clinic'],
+    color: '#00BCD4',
+    icon: 'medical'
+  },
+  'Travel': {
+    name: 'Travel',
+    keywords: ['flight', 'hotel', 'booking', 'trip', 'travel', 'vacation', 'holiday'],
+    color: '#795548',
+    icon: 'airplane'
+  },
+  'Education': {
+    name: 'Education',
+    keywords: ['course', 'school', 'college', 'university', 'training', 'education', 'learning'],
+    color: '#795548',
+    icon: 'school'
+  },
+  'Personal Care': {
+    name: 'Personal Care',
+    keywords: ['salon', 'spa', 'beauty', 'cosmetics', 'personal care', 'grooming'],
+    color: '#9C27B0',
+    icon: 'cut'
+  },
+  'Gifts & Donations': {
+    name: 'Gifts & Donations',
+    keywords: ['gift', 'donation', 'charity', 'contribution'],
+    color: '#4CAF50',
+    icon: 'gift'
+  },
+  'Investments': {
+    name: 'Investments',
+    keywords: ['stocks', 'mutual', 'fund', 'investment', 'trading', 'share'],
+    color: '#FFC107',
+    icon: 'trending-up'
+  },
+  'Wallet': {
+    name: 'Wallet',
+    keywords: ['paytm', 'phonepe', 'gpay', 'wallet', 'upi', 'payment app'],
+    color: '#2196F3',
+    icon: 'wallet'
+  },
+  'Salary': {
+    name: 'Salary',
+    keywords: ['salary', 'income', 'credit', 'deposit', 'payment received'],
+    color: '#4CAF50',
+    icon: 'cash'
+  },
+  'Other': {
+    name: 'Other',
+    keywords: [],
+    color: '#607D8B',
+    icon: 'help-circle'
+  }
+};
+
+// Add this function to get category definition
+export const getCategoryDefinition = (categoryName: string): CategoryDefinition => {
+  return categoryRules[categoryName as Category] || categoryRules['Other'];
 };
 
 class TransactionCategorizer {
@@ -88,7 +170,21 @@ class TransactionCategorizer {
   }
 
   private extractTransactionText(transaction: Transaction): string {
-    return `${transaction.notes || ''} ${transaction.source_sms || ''} ${transaction.recipient || ''} ${transaction.account || ''} ${transaction.bank || ''}`.toLowerCase();
+    // Remove common transaction type words that might interfere with categorization
+    const text = `${transaction.notes || ''} ${transaction.source_sms || ''} ${transaction.recipient || ''} ${transaction.account || ''} ${transaction.bank || ''}`.toLowerCase();
+    const cleanedText = text
+      .replace(/\b(credited|debited|credit|debit|received|sent|paid|payment|transaction)\b/g, '')
+      .replace(/\b(rs\.?|inr|account|balance|available|transaction|id|ref|upi|imps|neft)\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    console.log('Transaction Text:', {
+      original: text,
+      cleaned: cleanedText,
+      patterns: this.extractPatterns(text)
+    });
+    
+    return cleanedText;
   }
 
   private tokenize(text: string): string[] {
@@ -111,26 +207,93 @@ class TransactionCategorizer {
     return intersection.size / union.size;
   }
 
-  private ruleBasedCategorization(transaction: Transaction): Category | null {
-    const text = this.extractTransactionText(transaction);
+  private extractPatterns(text: string): string[] {
+    console.log('\n=== Extracting Patterns ===');
+    console.log('Input text:', text);
     
-    // First check learned rules
-    for (const rule of this.learnedRules) {
-      if (text.includes(rule.pattern.toLowerCase())) {
-        rule.lastUsed = Date.now();
-        rule.usageCount++;
-        return rule.category;
+    // Split into words and clean
+    const words = text.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+    console.log('Split words:', words);
+    
+    // Common words to exclude from merchant names
+    const excludeWords = new Set([
+      'bank', 'acct', 'account', 'debit', 'credit', 'rs', 'inr', 'paid', 'to', 'from',
+      'upi', 'transaction', 'id', 'ref', 'no', 'date', 'time', 'for', 'on', 'at', 'the',
+      'a', 'an', 'and', 'or', 'but', 'in', 'out', 'of', 'by', 'with', 'via', 'through',
+      'call', 'sms', 'block', 'dispute', 'help', 'support', 'customer', 'service'
+    ]);
+
+    // Extract merchant names and important identifiers
+    const merchantWords = words.filter(word => {
+      // Remove common suffixes and clean the word
+      const cleanWord = word.replace(/[.,;:!?]$/, '');
+      
+      // Skip if it's a number or excluded word
+      if (/^\d+$/.test(cleanWord) || excludeWords.has(cleanWord)) {
+        return false;
+      }
+      
+      // Keep words that look like merchant names (start with capital letter or are all caps)
+      return /^[A-Z]/.test(cleanWord) || /^[A-Z]+$/.test(cleanWord);
+    });
+
+    console.log('Extracted merchant words:', merchantWords);
+
+    // Extract patterns using regex
+    const patterns: string[] = [];
+    
+    // Pattern for merchant names after "credited" or "debited"
+    const merchantPattern = /(?:credited|debited)(?:\s+for|\s+by|\s+to|\s+from)?\s+([A-Za-z]+)/i;
+    const merchantMatch = text.match(merchantPattern);
+    if (merchantMatch) {
+      patterns.push(merchantMatch[1]);
+    }
+
+    // Add merchant words to patterns
+    patterns.push(...merchantWords);
+
+    console.log('\nChecking patterns:');
+    patterns.forEach(pattern => {
+      console.log(`Pattern: ${pattern}`);
+    });
+
+    console.log('\nFinal extracted patterns:', patterns);
+    return patterns;
+  }
+
+  private ruleBasedCategorization(text: string, type: 'credit' | 'debit'): Category {
+    console.log('\n=== Starting Categorization ===');
+    console.log('Input text:', text);
+    console.log('Transaction type:', type);
+
+    const patterns = this.extractPatterns(text);
+    const lowerText = text.toLowerCase();
+
+    // First check for transportation-related keywords
+    const transportKeywords = categoryRules['Transportation'].keywords;
+    for (const keyword of transportKeywords) {
+      if (lowerText.includes(keyword.toLowerCase())) {
+        console.log(`Matched transportation keyword: ${keyword}`);
+        return 'Transportation';
       }
     }
-    
-    // Then check predefined rules
-    for (const [category, keywords] of Object.entries(categoryRules)) {
-      if (keywords.some(keyword => text.includes(keyword))) {
-        return category as Category;
+
+    // Then check other categories
+    for (const [category, definition] of Object.entries(categoryRules)) {
+      if (category === 'Transportation') continue; // Skip as we already checked
+
+      for (const keyword of definition.keywords) {
+        if (lowerText.includes(keyword.toLowerCase())) {
+          console.log(`Matched ${category} keyword: ${keyword}`);
+          return category as Category;
+        }
       }
     }
-    
-    return null;
+
+    // If no matches found, return default category based on type
+    const defaultCategory = type === 'credit' ? 'Salary' : 'Other';
+    console.log(`No matches found, using default category: ${defaultCategory}`);
+    return defaultCategory;
   }
 
   private mlBasedCategorization(transaction: Transaction): Category {
@@ -160,14 +323,24 @@ class TransactionCategorizer {
   }
 
   public async categorizeTransaction(transaction: Transaction): Promise<Transaction> {
+    console.log('Categorizing transaction:', {
+      id: transaction.id,
+      type: transaction.type,
+      recipient: transaction.recipient,
+      notes: transaction.notes,
+      source_sms: transaction.source_sms
+    });
+
     // Try rule-based categorization first
-    const ruleBasedCategory = this.ruleBasedCategorization(transaction);
+    const ruleBasedCategory = this.ruleBasedCategorization(this.extractTransactionText(transaction), transaction.type as 'credit' | 'debit');
     if (ruleBasedCategory) {
+      console.log('Using rule-based category:', ruleBasedCategory);
       return { ...transaction, category: ruleBasedCategory };
     }
 
     // Fall back to ML-based categorization
     const mlCategory = this.mlBasedCategorization(transaction);
+    console.log('Using ML-based category:', mlCategory);
     return { ...transaction, category: mlCategory };
   }
 
@@ -203,39 +376,6 @@ class TransactionCategorizer {
 
     // Save the updated data
     await this.saveTrainingData();
-  }
-
-  private extractPatterns(text: string): string[] {
-    const patterns: string[] = [];
-    const words = text.split(/\s+/);
-    
-    // Extract merchant names (capitalized words)
-    const merchantWords = words.filter(word => 
-      word.length > 2 && 
-      word === word.toUpperCase() && 
-      !['INR', 'RS', 'DEBIT', 'CREDIT', 'ACCOUNT', 'BALANCE', 'TRANSACTION'].includes(word)
-    );
-    patterns.push(...merchantWords);
-
-    // Extract common transaction patterns
-    const commonPatterns = [
-      /(?:at|from|via)\s+([A-Z][A-Z\s&]+?)(?:\s|$|\.|,)/i,
-      /(?:purchase|payment|transaction)\s+(?:at|from)\s+([A-Z][A-Z\s&]+?)(?:\s|$|\.|,)/i,
-      /(?:merchant|store|shop):\s*([A-Z][A-Z\s&]+?)(?:\s|$|\.|,)/i,
-      /(?:UPI|PAYTM|GPAY)\s+(?:to|at)\s+([A-Z][A-Z\s&]+?)(?:\s|$|\.|,)/i,
-    ];
-
-    for (const pattern of commonPatterns) {
-      const match = text.match(pattern);
-      if (match && match[1]) {
-        const extracted = match[1].trim();
-        if (extracted.length > 2 && extracted.length < 50) {
-          patterns.push(extracted);
-        }
-      }
-    }
-
-    return patterns;
   }
 
   private cleanupLearnedRules() {

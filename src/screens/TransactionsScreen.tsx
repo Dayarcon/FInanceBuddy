@@ -13,15 +13,9 @@ import {
     TouchableOpacity,
     View
 } from 'react-native';
-import {
-    categorizeTransaction,
-    CustomCategoryRule,
-    defaultCustomRules,
-    getCategoryDefinition
-} from '../services/categoryService';
 import { getAllTransactions, getDBConnection } from '../services/database';
 import { Transaction } from '../types/transaction';
-import { transactionCategorizer, Category, categoryRules } from '../utils/transactionCategorizer';
+import { transactionCategorizer, Category, categoryRules, getCategoryDefinition } from '../utils/transactionCategorizer';
 
 type FilterType = 'all' | 'credit' | 'debit';
 type SortType = 'date' | 'amount' | 'bank';
@@ -39,24 +33,15 @@ export default function TransactionsScreen() {
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [showMonthPicker, setShowMonthPicker] = useState(false);
-  const [customRules, setCustomRules] = useState<CustomCategoryRule[]>([]);
-  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [selectedTransactionForEdit, setSelectedTransactionForEdit] = useState<Transaction | null>(null);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [transactionCategories, setTransactionCategories] = useState<Record<string, string>>({});
   const router = useRouter();
 
   const months = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
   ];
-
-  // Load custom rules (same as in Reports screen)
-  const loadCustomRules = () => {
-    setCustomRules(defaultCustomRules);
-  };
-
-  useEffect(() => {
-    loadCustomRules();
-  }, []);
 
   // Set initial filter from URL params
   useEffect(() => {
@@ -155,9 +140,9 @@ export default function TransactionsScreen() {
     const monthYear = `${months[selectedMonth.getMonth()]} ${selectedMonth.getFullYear()}`;
     switch (filter) {
       case 'credit':
-        return `Credit Transactions - ${monthYear}`;
+        return `Credit in - ${monthYear}`;
       case 'debit':
-        return `Debit Transactions - ${monthYear}`;
+        return `Debit in - ${monthYear}`;
       default:
         return `${monthYear}`;
     }
@@ -179,51 +164,73 @@ export default function TransactionsScreen() {
 
   const handleCategoryChange = async (transaction: Transaction, newCategory: Category) => {
     try {
-      // Update the transaction in the database
       const db = await getDBConnection();
-      await new Promise<void>((resolve, reject) => {
-        db.transaction(tx => {
-          tx.executeSql(
-            'UPDATE transactions SET category = ? WHERE id = ?',
-            [newCategory, transaction.id],
-            () => resolve(),
-            (_, error) => {
-              reject(error);
-              return false;
-            }
-          );
-        });
+      if (!db) {
+        throw new Error('Failed to connect to database');
+      }
+
+      // Update transaction in database
+      await db.transaction(tx => {
+        tx.executeSql(
+          'UPDATE transactions SET category = ? WHERE id = ?',
+          [newCategory, transaction.id]
+        );
       });
 
-      // Update the local state
+      // Learn from the correction
+      await transactionCategorizer.learnFromCorrection(transaction, newCategory);
+
+      // Update local state
       setTransactions(prevTransactions =>
         prevTransactions.map(t =>
           t.id === transaction.id ? { ...t, category: newCategory } : t
         )
       );
 
-      // Trigger auto-learning
-      await transactionCategorizer.learnFromCorrection(transaction, newCategory);
+      // Update categories state
+      setTransactionCategories(prev => ({
+        ...prev,
+        [transaction.id]: newCategory
+      }));
 
-      // Show success message
-      Alert.alert('Success', 'Transaction category updated successfully');
+      Alert.alert('Success', 'Category updated successfully');
     } catch (error) {
       console.error('Error updating category:', error);
-      Alert.alert('Error', 'Failed to update transaction category');
+      Alert.alert('Error', 'Failed to update category');
     }
   };
+
+  // Add useEffect to handle categorization
+  useEffect(() => {
+    const categorizeTransactions = async () => {
+      const categories: Record<string, string> = {};
+      for (const transaction of transactions) {
+        if (!transaction.category) {
+          const result = await transactionCategorizer.categorizeTransaction(transaction);
+          categories[transaction.id] = result.category;
+        }
+      }
+      setTransactionCategories(categories);
+    };
+
+    categorizeTransactions();
+  }, [transactions]);
 
   const renderTransaction = ({ item }: { item: Transaction }) => {
     const isDebit = item.type === 'debit';
     const recipientOrSender = isDebit ? item.recipient : item.recipient;
+    const category = item.category || transactionCategories[item.id] || 'Other';
+    const categoryDef = getCategoryDefinition(category);
 
     return (
       <TouchableOpacity
         style={styles.transactionItem}
-        onPress={() => {
+        onPress={() => setSelectedTransaction(item)}
+        onLongPress={() => {
           setSelectedTransactionForEdit(item);
           setShowCategoryPicker(true);
         }}
+        delayLongPress={500}
       >
         <View style={styles.transactionHeader}>
           <Text style={styles.transactionDate}>
@@ -248,18 +255,10 @@ export default function TransactionsScreen() {
             <Text style={styles.recipientText}>{recipientOrSender}</Text>
           </View>
           <View style={styles.categoryContainer}>
-            {(() => {
-              const category = item.category || categorizeTransaction(item, customRules);
-              const categoryDef = getCategoryDefinition(category);
-              return (
-                <>
-                  <Ionicons name={categoryDef.icon as any} size={14} color={categoryDef.color} />
-                  <Text style={[styles.categoryText, { color: categoryDef.color }]}>
-                    {category}
-                  </Text>
-                </>
-              );
-            })()}
+            <Ionicons name={categoryDef.icon as any} size={14} color={categoryDef.color} />
+            <Text style={[styles.categoryText, { color: categoryDef.color }]}>
+              {category}
+            </Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -399,7 +398,8 @@ export default function TransactionsScreen() {
                 <Text style={styles.detailLabel}>Category:</Text>
                 <View style={styles.categoryContainer}>
                   {(() => {
-                    const category = categorizeTransaction(selectedTransaction, customRules);
+                    const category = selectedTransaction.category || 
+                      transactionCategories[selectedTransaction.id] || 'Other';
                     const categoryDef = getCategoryDefinition(category);
                     return (
                       <>
@@ -579,7 +579,7 @@ export default function TransactionsScreen() {
             </View>
             
             <ScrollView style={styles.categoryList}>
-              {Object.keys(categoryRules).map((category) => (
+              {Object.entries(categoryRules).map(([category, definition]) => (
                 <TouchableOpacity
                   key={category}
                   style={styles.categoryItem}
@@ -590,7 +590,12 @@ export default function TransactionsScreen() {
                     setShowCategoryPicker(false);
                   }}
                 >
-                  <Text style={styles.categoryItemText}>{category}</Text>
+                  <View style={styles.categoryItemContent}>
+                    <Ionicons name={definition.icon as any} size={20} color={definition.color} />
+                    <Text style={[styles.categoryItemText, { color: definition.color }]}>
+                      {category}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -822,6 +827,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
+  },
+  categoryItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   categoryItemText: {
     fontSize: 16,
