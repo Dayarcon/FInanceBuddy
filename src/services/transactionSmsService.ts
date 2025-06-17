@@ -84,12 +84,13 @@ const parseTransactionSMS = (sms: SMS): Transaction | null => {
   console.log('Contains \'credited\':', hasCredit);
 
   let type: TransactionType;
-  if (hasCredit) {
-    console.log('Setting type to CREDIT based on credit indicators');
-    type = 'credit';
-  } else if (hasDebit) {
+  // Prioritize debit if the message contains 'debited' since ICICI messages show 'credited' for the recipient
+  if (hasDebit) {
     console.log('Setting type to DEBIT based on debit indicators');
     type = 'debit';
+  } else if (hasCredit) {
+    console.log('Setting type to CREDIT based on credit indicators');
+    type = 'credit';
   } else {
     console.log('No clear transaction type found, defaulting to DEBIT');
     type = 'debit';

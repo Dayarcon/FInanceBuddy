@@ -141,54 +141,57 @@ export class MessageParserService {
       .filter((bill): bill is ParsedBill => bill !== null);
   }
 
-  parseBankMessage(message: string): Transaction | null {
+  public parseBankMessage(message: string): Transaction | null {
     try {
-      // Extract bank name
-      const bankMatch = message.match(/(ICICI|HDFC|SBI|AXIS|KOTAK|YES)\s+BANK/i);
-      const bankName = bankMatch ? bankMatch[1].toUpperCase() : 'Unknown Bank';
+      // Extract bank name - look for bank name in both credit and debit messages
+      let bank = 'Unknown Bank';
+      for (const bankName of this.commonBanks) {
+        if (message.toLowerCase().includes(bankName.toLowerCase())) {
+          bank = bankName;
+          break;
+        }
+      }
 
-      // Extract transaction type
+      // Determine if it's a credit or debit transaction
       const isCredit = message.toLowerCase().includes('credited');
       const isDebit = message.toLowerCase().includes('debited');
       const type = isCredit ? 'credit' : isDebit ? 'debit' : null;
+
       if (!type) return null;
 
       // Extract amount
-      const amountMatch = message.match(/Rs\s+(\d+(?:\.\d{2})?)/);
+      const amountMatch = message.match(/Rs\.?\s*([\d,]+(\.\d{2})?)/i);
       if (!amountMatch) return null;
-      const amount = parseFloat(amountMatch[1]);
+      const amount = parseFloat(amountMatch[1].replace(/,/g, ''));
 
       // Extract date
       const dateMatch = message.match(/(\d{2})-([A-Za-z]{3})-(\d{2})/);
       if (!dateMatch) return null;
-      const date = dateMatch[0]; // Format: DD-MMM-YY
+      const date = dateMatch[0];
 
       // Extract party name
       let party = '';
       if (type === 'credit') {
-        const fromMatch = message.match(/from\s+([^.]+)/);
-        if (fromMatch) {
-          party = fromMatch[1].trim();
-        }
+        const creditMatch = message.match(/from\s+([^.]+)/i);
+        party = creditMatch ? creditMatch[1].trim() : '';
       } else {
-        const toMatch = message.match(/;\s*([^.]+)\s+credited/);
-        if (toMatch) {
-          party = toMatch[1].trim();
-        }
+        // For debit transactions, look for the pattern: "debited for Rs X; [PARTY] credited"
+        const debitMatch = message.match(/debited[^;]+;\s*([^.]+)\s+credited/i);
+        party = debitMatch ? debitMatch[1].trim() : '';
       }
 
-      // Extract UPI reference
+      // Extract UPI reference if present
       const upiMatch = message.match(/UPI:(\d+)/);
-      const upi_reference = upiMatch ? upiMatch[1] : '';
+      const upiReference = upiMatch ? upiMatch[1] : '';
 
       return {
         date,
         type,
         amount,
         party,
-        upi_reference,
-        bank: bankName,
-        paymentMethod: 'upi'
+        upi_reference: upiReference,
+        bank,
+        paymentMethod: 'UPI'
       };
     } catch (error) {
       console.error('Error parsing bank message:', error);

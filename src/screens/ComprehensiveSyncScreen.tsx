@@ -174,16 +174,6 @@ export default function ComprehensiveSyncScreen() {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="arrow-back" size={24} color="#007AFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>SMS Sync</Text>
-      </View>
 
       {/* Info Section */}
       <View style={styles.infoCard}>

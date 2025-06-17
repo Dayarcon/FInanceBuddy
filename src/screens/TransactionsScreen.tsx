@@ -18,7 +18,8 @@ import {
     defaultCustomRules,
     getCategoryDefinition
 } from '../services/categoryService';
-import { getAllTransactions, getDBConnection, Transaction } from '../services/database';
+import { getAllTransactions, getDBConnection } from '../services/database';
+import { Transaction } from '../types';
 
 type FilterType = 'all' | 'credit' | 'debit';
 type SortType = 'date' | 'amount' | 'bank';
@@ -130,7 +131,7 @@ export default function TransactionsScreen() {
         case 'amount':
           return b.amount - a.amount;
         case 'bank':
-          return (a.account || '').localeCompare(b.account || '');
+          return (a.bank || '').localeCompare(b.bank || '');
         default:
           return 0;
       }
@@ -154,7 +155,7 @@ export default function TransactionsScreen() {
       case 'debit':
         return `Debit Transactions - ${monthYear}`;
       default:
-        return `All Transactions - ${monthYear}`;
+        return `${monthYear}`;
     }
   };
 
@@ -173,17 +174,21 @@ export default function TransactionsScreen() {
   };
 
   const renderTransaction = ({ item }: { item: Transaction }) => {
-    const recipientOrSender = item.recipient 
-      ? (item.type === 'debit' ? `To: ${item.recipient}` : `From: ${item.recipient}`)
+    const recipientOrSender = item.party 
+      ? (item.type === 'debit' ? `To: ${item.party}` : `From: ${item.party}`)
       : 'Unknown';
+
+    const isDebit = item.type === 'debit';
+    const amountColor = isDebit ? '#F44336' : '#4CAF50';
+    const bgColor = isDebit ? '#fef2f2' : '#f0f9f0';
 
     return (
       <TouchableOpacity 
         style={[
           styles.transactionItem,
           { 
-            backgroundColor: item.type === 'credit' ? '#f0f9f0' : '#fef2f2',
-            borderLeftColor: item.type === 'credit' ? '#4CAF50' : '#F44336',
+            backgroundColor: bgColor,
+            borderLeftColor: amountColor,
             borderLeftWidth: 4
           }
         ]}
@@ -192,12 +197,12 @@ export default function TransactionsScreen() {
         <View style={styles.transactionHeader}>
           <View style={styles.amountContainer}>
             <Ionicons 
-              name={item.type === 'credit' ? 'arrow-up-circle' : 'arrow-down-circle'} 
+              name={isDebit ? 'arrow-down-circle' : 'arrow-up-circle'} 
               size={20} 
-              color={item.type === 'credit' ? '#4CAF50' : '#F44336'} 
+              color={amountColor}
             />
-            <Text style={[styles.amountText, { color: item.type === 'credit' ? '#4CAF50' : '#F44336' }]}>
-              {item.type === 'credit' ? '+' : '-'}₹{item.amount.toFixed(2)}
+            <Text style={[styles.amountText, { color: amountColor }]}>
+              {isDebit ? '-' : '+'}₹{item.amount.toFixed(2)}
             </Text>
           </View>
           <Text style={styles.dateText}>
@@ -208,11 +213,11 @@ export default function TransactionsScreen() {
         <View style={styles.transactionDetails}>
           <View style={styles.bankContainer}>
             <Ionicons name="business" size={16} color="#666" />
-            <Text style={styles.bankText}>{item.account || 'Unknown Bank'}</Text>
+            <Text style={styles.bankText}>{item.bank}</Text>
           </View>
           <View style={styles.recipientContainer}>
             <Ionicons 
-              name={item.type === 'debit' ? 'person' : 'person-add'} 
+              name={isDebit ? 'person' : 'person-add'} 
               size={16} 
               color="#666" 
             />
@@ -345,7 +350,7 @@ export default function TransactionsScreen() {
 
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Bank:</Text>
-                <Text style={styles.detailValue}>{selectedTransaction.account || 'Unknown'}</Text>
+                <Text style={styles.detailValue}>{selectedTransaction.bank || 'Unknown'}</Text>
               </View>
 
               {selectedTransaction.recipient && (
