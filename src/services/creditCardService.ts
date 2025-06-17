@@ -544,7 +544,7 @@ export const checkSmsForBillPayments = async (sms: string): Promise<void> => {
           ...payment,
           matchedBillId: Number(bill.id),
           createdAt: new Date().toISOString()
-        });
+        } as unknown as Record<string, SQLite.SQLStatementArg>);
 
         remainingPaymentAmount -= amountToApply;
         paymentMatched = true;
@@ -684,7 +684,7 @@ export const processUPITransaction = async (sms: string): Promise<void> => {
           );
 
           // Insert payment record
-          await insertRecord(db, 'credit_card_payments', payment);
+          await insertRecord(db, 'credit_card_payments', payment as unknown as Record<string, SQLite.SQLStatementArg>);
 
           remainingPaymentAmount -= amountToApply;
           paymentMatched = true;

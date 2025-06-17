@@ -6,6 +6,7 @@ import {
     FlatList,
     Modal,
     RefreshControl,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -20,6 +21,7 @@ import {
 } from '../services/categoryService';
 import { getAllTransactions, getDBConnection } from '../services/database';
 import { Transaction } from '../types/transaction';
+import { transactionCategorizer, Category, categoryRules } from '../utils/transactionCategorizer';
 
 type FilterType = 'all' | 'credit' | 'debit';
 type SortType = 'date' | 'amount' | 'bank';
@@ -38,6 +40,8 @@ export default function TransactionsScreen() {
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [customRules, setCustomRules] = useState<CustomCategoryRule[]>([]);
+  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [selectedTransactionForEdit, setSelectedTransactionForEdit] = useState<Transaction | null>(null);
   const router = useRouter();
 
   const months = [
@@ -173,43 +177,63 @@ export default function TransactionsScreen() {
     setSelectedMonth(newDate);
   };
 
-  const renderTransaction = ({ item }: { item: Transaction }) => {
-    const recipientOrSender = item.party 
-      ? (item.type === 'debit' ? `To: ${item.party}` : `From: ${item.party}`)
-      : 'Unknown';
+  const handleCategoryChange = async (transaction: Transaction, newCategory: Category) => {
+    try {
+      // Update the transaction in the database
+      const db = await getDBConnection();
+      await new Promise<void>((resolve, reject) => {
+        db.transaction(tx => {
+          tx.executeSql(
+            'UPDATE transactions SET category = ? WHERE id = ?',
+            [newCategory, transaction.id],
+            () => resolve(),
+            (_, error) => {
+              reject(error);
+              return false;
+            }
+          );
+        });
+      });
 
+      // Update the local state
+      setTransactions(prevTransactions =>
+        prevTransactions.map(t =>
+          t.id === transaction.id ? { ...t, category: newCategory } : t
+        )
+      );
+
+      // Trigger auto-learning
+      await transactionCategorizer.learnFromCorrection(transaction, newCategory);
+
+      // Show success message
+      Alert.alert('Success', 'Transaction category updated successfully');
+    } catch (error) {
+      console.error('Error updating category:', error);
+      Alert.alert('Error', 'Failed to update transaction category');
+    }
+  };
+
+  const renderTransaction = ({ item }: { item: Transaction }) => {
     const isDebit = item.type === 'debit';
-    const amountColor = isDebit ? '#F44336' : '#4CAF50';
-    const bgColor = isDebit ? '#fef2f2' : '#f0f9f0';
+    const recipientOrSender = isDebit ? item.recipient : item.recipient;
 
     return (
-      <TouchableOpacity 
-        style={[
-          styles.transactionItem,
-          { 
-            backgroundColor: bgColor,
-            borderLeftColor: amountColor,
-            borderLeftWidth: 4
-          }
-        ]}
-        onPress={() => setSelectedTransaction(item)}
+      <TouchableOpacity
+        style={styles.transactionItem}
+        onPress={() => {
+          setSelectedTransactionForEdit(item);
+          setShowCategoryPicker(true);
+        }}
       >
         <View style={styles.transactionHeader}>
-          <View style={styles.amountContainer}>
-            <Ionicons 
-              name={isDebit ? 'arrow-down-circle' : 'arrow-up-circle'} 
-              size={20} 
-              color={amountColor}
-            />
-            <Text style={[styles.amountText, { color: amountColor }]}>
-              {isDebit ? '-' : '+'}₹{item.amount.toFixed(2)}
-            </Text>
-          </View>
-          <Text style={styles.dateText}>
+          <Text style={styles.transactionDate}>
             {new Date(item.date).toLocaleDateString()}
           </Text>
+          <Text style={[styles.amount, isDebit ? styles.debit : styles.credit]}>
+            {isDebit ? '-' : '+'}₹{item.amount.toLocaleString()}
+          </Text>
         </View>
-        
+
         <View style={styles.transactionDetails}>
           <View style={styles.bankContainer}>
             <Ionicons name="business" size={16} color="#666" />
@@ -225,7 +249,7 @@ export default function TransactionsScreen() {
           </View>
           <View style={styles.categoryContainer}>
             {(() => {
-              const category = categorizeTransaction(item, customRules);
+              const category = item.category || categorizeTransaction(item, customRules);
               const categoryDef = getCategoryDefinition(category);
               return (
                 <>
@@ -535,6 +559,44 @@ export default function TransactionsScreen() {
           </View>
         </View>
       </Modal>
+      
+      <Modal
+        visible={showCategoryPicker}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowCategoryPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Change Category</Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowCategoryPicker(false)}
+              >
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+            
+            <ScrollView style={styles.categoryList}>
+              {Object.keys(categoryRules).map((category) => (
+                <TouchableOpacity
+                  key={category}
+                  style={styles.categoryItem}
+                  onPress={() => {
+                    if (selectedTransactionForEdit) {
+                      handleCategoryChange(selectedTransactionForEdit, category as Category);
+                    }
+                    setShowCategoryPicker(false);
+                  }}
+                >
+                  <Text style={styles.categoryItemText}>{category}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -667,19 +729,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
-  amountContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  amountText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  dateText: {
+  transactionDate: {
     fontSize: 14,
     color: '#666',
     fontWeight: '500',
+  },
+  amount: {
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  debit: {
+    color: '#F44336',
+  },
+  credit: {
+    color: '#4CAF50',
   },
   transactionDetails: {
     gap: 8,
@@ -730,26 +793,38 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
   },
   modalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
-    width: '100%',
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 20,
+    width: '90%',
     maxHeight: '80%',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   modalTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 20,
-    textAlign: 'center',
+  },
+  modalCloseButton: {
+    padding: 5,
+  },
+  categoryList: {
+    maxHeight: 400,
+  },
+  categoryItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+  },
+  categoryItemText: {
+    fontSize: 16,
   },
   sectionTitle: {
     fontSize: 16,
