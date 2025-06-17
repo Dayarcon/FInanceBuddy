@@ -481,4 +481,224 @@ export const getAllCreditCardPayments = async (): Promise<CreditCardPayment[]> =
     console.error('Error getting all credit card payments:', error);
     throw error;
   }
+};
+
+// Check SMS for bill payments and update bill status
+export const checkSmsForBillPayments = async (sms: string): Promise<void> => {
+  try {
+    const db = getDBConnection();
+    if (!db) {
+      throw new Error('Failed to connect to database');
+    }
+
+    // Parse the payment from SMS
+    const payment = parseCreditCardPayment(sms);
+    if (!payment) {
+      return;
+    }
+
+    // Get all unpaid bills for this card
+    const billsQuery = `
+      SELECT * FROM credit_card_bills 
+      WHERE cardNumber = ? 
+      AND status != 'fully_paid' 
+      ORDER BY dueDate ASC
+    `;
+    const bills = await executeQuery(db, billsQuery, [payment.cardNumber]);
+
+    if (bills.length === 0) {
+      console.log(`No unpaid bills found for card ${payment.cardNumber}`);
+      return;
+    }
+
+    // Try to match payment with bills
+    let remainingPaymentAmount = payment.paymentAmount;
+    let paymentMatched = false;
+
+    for (const bill of bills) {
+      if (remainingPaymentAmount <= 0) break;
+
+      const remainingBillAmount = Number(bill.remainingAmount);
+      if (remainingBillAmount <= 0) continue;
+
+      // Check if payment amount matches bill amount (exact or partial)
+      if (payment.paymentAmount === bill.totalAmount || 
+          payment.paymentAmount === bill.minimumDue ||
+          (payment.paymentAmount > bill.minimumDue && payment.paymentAmount < bill.totalAmount)) {
+        
+        const amountToApply = Math.min(remainingPaymentAmount, remainingBillAmount);
+        const newPaidAmount = Number(bill.paidAmount) + amountToApply;
+        const newRemainingAmount = remainingBillAmount - amountToApply;
+        const newStatus = newRemainingAmount <= 0 ? 'fully_paid' : 'partially_paid';
+
+        // Update bill status
+        await updateBillStatus(
+          Number(bill.id),
+          newStatus,
+          newPaidAmount,
+          newRemainingAmount
+        );
+
+        // Insert payment record
+        await insertRecord(db, 'credit_card_payments', {
+          ...payment,
+          matchedBillId: Number(bill.id),
+          createdAt: new Date().toISOString()
+        });
+
+        remainingPaymentAmount -= amountToApply;
+        paymentMatched = true;
+      }
+    }
+
+    if (paymentMatched) {
+      console.log(`Successfully matched payment of ₹${payment.paymentAmount} for card ${payment.cardNumber}`);
+    } else {
+      console.log(`No matching bill found for payment of ₹${payment.paymentAmount} for card ${payment.cardNumber}`);
+    }
+  } catch (error) {
+    console.error('Error checking SMS for bill payments:', error);
+    throw error;
+  }
+};
+
+// Parse UPI Transaction from SMS
+export const parseUPITransaction = (sms: string): {
+  amount: number;
+  date: string;
+  vpa: string;
+  refNo: string;
+  bank: string;
+  type: 'debit' | 'credit';
+} | null => {
+  try {
+    // Pattern for UPI debit messages
+    // Example: "Rs 546.00 debited via UPI on 31-05-2025 21:08:59 to VPA paytmqr177zry6st7@paytm.Ref No 551731379635.Small txns?Use UPI Lite!-Federal Bank"
+    const debitPattern = /Rs\s+([\d,]+\.?\d*)\s+debited\s+via\s+UPI\s+on\s+(\d{2}-\d{2}-\d{4}\s+\d{2}:\d{2}:\d{2})\s+to\s+VPA\s+([^\s]+)\.Ref\s+No\s+(\d+)\.([^-]+)-([A-Za-z\s]+)/i;
+    
+    // Pattern for UPI credit messages
+    // Example: "Rs 1000.00 credited via UPI on 31-05-2025 21:08:59 from VPA paytmqr177zry6st7@paytm.Ref No 551731379635.Small txns?Use UPI Lite!-Federal Bank"
+    const creditPattern = /Rs\s+([\d,]+\.?\d*)\s+credited\s+via\s+UPI\s+on\s+(\d{2}-\d{2}-\d{4}\s+\d{2}:\d{2}:\d{2})\s+from\s+VPA\s+([^\s]+)\.Ref\s+No\s+(\d+)\.([^-]+)-([A-Za-z\s]+)/i;
+
+    let match = sms.match(debitPattern);
+    if (match) {
+      const [, amountStr, dateStr, vpa, refNo, , bank] = match;
+      return {
+        amount: parseFloat(amountStr.replace(/,/g, '')),
+        date: convertDateToISO(dateStr),
+        vpa,
+        refNo,
+        bank: bank.trim(),
+        type: 'debit'
+      };
+    }
+
+    match = sms.match(creditPattern);
+    if (match) {
+      const [, amountStr, dateStr, vpa, refNo, , bank] = match;
+      return {
+        amount: parseFloat(amountStr.replace(/,/g, '')),
+        date: convertDateToISO(dateStr),
+        vpa,
+        refNo,
+        bank: bank.trim(),
+        type: 'credit'
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error parsing UPI transaction:', error);
+    return null;
+  }
+};
+
+// Process UPI transaction for credit card payment
+export const processUPITransaction = async (sms: string): Promise<void> => {
+  try {
+    const db = getDBConnection();
+    if (!db) {
+      throw new Error('Failed to connect to database');
+    }
+
+    // Parse UPI transaction
+    const upiTransaction = parseUPITransaction(sms);
+    if (!upiTransaction) {
+      return;
+    }
+
+    // For credit card payments, we'll check all banks since VPA might not indicate the target bank
+    if (upiTransaction.type === 'debit') {
+      // Get all unpaid bills from all banks
+      const billsQuery = `
+        SELECT * FROM credit_card_bills 
+        WHERE status != 'fully_paid' 
+        ORDER BY dueDate ASC
+      `;
+      const bills = await executeQuery(db, billsQuery, []);
+
+      if (bills.length === 0) {
+        console.log('No unpaid bills found');
+        return;
+      }
+
+      // Try to match payment with bills
+      let remainingPaymentAmount = upiTransaction.amount;
+      let paymentMatched = false;
+
+      for (const bill of bills) {
+        if (remainingPaymentAmount <= 0) break;
+
+        const remainingBillAmount = Number(bill.remainingAmount);
+        if (remainingBillAmount <= 0) continue;
+
+        // Check if payment amount matches bill amount (exact or partial)
+        if (upiTransaction.amount === bill.totalAmount || 
+            upiTransaction.amount === bill.minimumDue ||
+            (upiTransaction.amount > bill.minimumDue && upiTransaction.amount < bill.totalAmount)) {
+          
+          const amountToApply = Math.min(remainingPaymentAmount, remainingBillAmount);
+          const newPaidAmount = Number(bill.paidAmount) + amountToApply;
+          const newRemainingAmount = remainingBillAmount - amountToApply;
+          const newStatus = newRemainingAmount <= 0 ? 'fully_paid' : 'partially_paid';
+
+          // Create payment object with the matched bill's bank
+          const payment: CreditCardPayment = {
+            cardNumber: bill.cardNumber,
+            bankName: bill.bankName,
+            paymentAmount: upiTransaction.amount,
+            paymentDate: upiTransaction.date,
+            paymentMethod: 'UPI',
+            transactionId: upiTransaction.refNo,
+            sourceSms: sms,
+            matchedBillId: Number(bill.id),
+            createdAt: new Date().toISOString()
+          };
+
+          // Update bill status
+          await updateBillStatus(
+            Number(bill.id),
+            newStatus,
+            newPaidAmount,
+            newRemainingAmount
+          );
+
+          // Insert payment record
+          await insertRecord(db, 'credit_card_payments', payment);
+
+          remainingPaymentAmount -= amountToApply;
+          paymentMatched = true;
+          
+          console.log(`Matched UPI payment of ₹${upiTransaction.amount} with ${bill.bankName} bill for card ${bill.cardNumber}`);
+        }
+      }
+
+      if (!paymentMatched) {
+        console.log(`No matching bill found for UPI payment of ₹${upiTransaction.amount}`);
+      }
+    }
+  } catch (error) {
+    console.error('Error processing UPI transaction:', error);
+    throw error;
+  }
 }; 

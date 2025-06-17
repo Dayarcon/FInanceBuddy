@@ -94,19 +94,19 @@ const BillsScreen = () => {
             Due: {format(new Date(item.dueDate), 'MMM dd, yyyy')}
           </Text>
         </View>
-        <Text style={styles.amount}>${item.amount.toFixed(2)}</Text>
+        <Text style={styles.amount}>₹{item.amount.toFixed(2)}</Text>
       </View>
 
       {item.isCreditCard && (
         <View style={styles.creditCardDetails}>
           {item.totalBalance && (
             <Text style={styles.creditCardDetail}>
-              Total Balance: ${item.totalBalance.toFixed(2)}
+              Total Balance: ₹{item.totalBalance.toFixed(2)}
             </Text>
           )}
           {item.minimumPayment && (
             <Text style={styles.creditCardDetail}>
-              Minimum Payment: ${item.minimumPayment.toFixed(2)}
+              Minimum Payment: ₹{item.minimumPayment.toFixed(2)}
             </Text>
           )}
         </View>

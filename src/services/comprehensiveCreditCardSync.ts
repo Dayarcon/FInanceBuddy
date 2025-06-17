@@ -4,7 +4,10 @@ import {
     insertCreditCardPayment,
     matchPaymentsToBills,
     parseCreditCardBill,
-    parseCreditCardPayment
+    parseCreditCardPayment,
+    checkSmsForBillPayments,
+    parseUPITransaction,
+    processUPITransaction
 } from './creditCardService';
 import { getDBConnection } from './database';
 
@@ -133,11 +136,49 @@ export const syncCreditCardData = async (): Promise<SyncResult> => {
                 });
                 
                 if (existingPayments.length === 0) {
-                  await insertCreditCardPayment(payment);
+                  // Use the new function to check and match the payment
+                  await checkSmsForBillPayments(sms.body);
                   paymentsInserted++;
-                  console.log(`Inserted credit card payment: ${payment.bankName} ${payment.cardNumber}`);
+                  console.log(`Processed credit card payment: ${payment.bankName} ${payment.cardNumber}`);
                 } else {
                   console.log(`Skipping duplicate payment: ${payment.bankName} ${payment.cardNumber}`);
+                }
+              }
+
+              // Try to parse as UPI transaction
+              const upiTransaction = parseUPITransaction(sms.body);
+              if (upiTransaction) {
+                console.log(`Found UPI transaction: ${upiTransaction.bank} - ₹${upiTransaction.amount}`);
+                
+                // Check for duplicate transaction
+                const existingTransactions = await new Promise<any[]>((resolve, reject) => {
+                  db.transaction(tx => {
+                    tx.executeSql(
+                      `SELECT * FROM credit_card_payments 
+                       WHERE transactionId = ? AND paymentMethod = 'UPI'
+                       LIMIT 1`,
+                      [upiTransaction.refNo],
+                      (_, { rows }) => {
+                        const items = [];
+                        for (let i = 0; i < rows.length; i++) {
+                          items.push(rows.item(i));
+                        }
+                        resolve(items);
+                      },
+                      (_, error) => {
+                        reject(error);
+                        return false;
+                      }
+                    );
+                  });
+                });
+                
+                if (existingTransactions.length === 0) {
+                  // Process UPI transaction
+                  await processUPITransaction(sms.body);
+                  console.log(`Processed UPI transaction: ${upiTransaction.bank} - ₹${upiTransaction.amount}`);
+                } else {
+                  console.log(`Skipping duplicate UPI transaction: ${upiTransaction.refNo}`);
                 }
               }
             } catch (error) {

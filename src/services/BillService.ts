@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { addDays, addMonths, addYears } from 'date-fns';
+import { getAllCreditCardBills, updateBillStatus } from './creditCardService';
 
 export interface Bill {
   id: string;
@@ -81,23 +82,39 @@ class BillService {
     const bill = bills.find((b) => b.id === id);
     
     if (bill) {
-      bill.isPaid = true;
-      bill.lastPaidDate = new Date();
-      
-      if (bill.isRecurring) {
-        // Create next bill instance
-        const nextDueDate = this.calculateNextDueDate(bill);
-        const nextBill: Bill = {
-          ...bill,
-          id: Date.now().toString(),
-          dueDate: nextDueDate,
-          isPaid: false,
-          lastPaidDate: undefined,
-        };
-        bills.push(nextBill);
+      if (bill.isCreditCard) {
+        // For credit card bills, update the status in SQLite database
+        try {
+          await updateBillStatus(
+            parseInt(id),
+            'fully_paid',
+            bill.amount,
+            0
+          );
+        } catch (error) {
+          console.error('Error marking credit card bill as paid:', error);
+          throw error;
+        }
+      } else {
+        // For regular bills, update in AsyncStorage
+        bill.isPaid = true;
+        bill.lastPaidDate = new Date();
+        
+        if (bill.isRecurring) {
+          // Create next bill instance
+          const nextDueDate = this.calculateNextDueDate(bill);
+          const nextBill: Bill = {
+            ...bill,
+            id: Date.now().toString(),
+            dueDate: nextDueDate,
+            isPaid: false,
+            lastPaidDate: undefined,
+          };
+          bills.push(nextBill);
+        }
+        
+        await this.saveBills(bills);
       }
-      
-      await this.saveBills(bills);
     }
   }
 
@@ -137,8 +154,32 @@ class BillService {
   }
 
   async getCreditCardBills(): Promise<Bill[]> {
-    const bills = await this.getBills();
-    return bills.filter(bill => bill.isCreditCard);
+    try {
+      // Get credit card bills from SQLite database
+      const creditCardBills = await getAllCreditCardBills();
+      
+      // Convert credit card bills to Bill interface format
+      return creditCardBills.map(bill => ({
+        id: bill.id?.toString() || '',
+        name: `${bill.bankName} Credit Card`,
+        amount: bill.totalAmount,
+        dueDate: new Date(bill.dueDate),
+        isRecurring: false,
+        category: 'Credit Card',
+        isPaid: bill.status === 'fully_paid',
+        isCreditCard: true,
+        bankName: bill.bankName,
+        cardNumber: bill.cardNumber,
+        statementDate: new Date(bill.statementDate),
+        paymentDueDate: new Date(bill.dueDate),
+        minimumPayment: bill.minimumDue,
+        totalBalance: bill.totalAmount,
+        lastPaidDate: bill.status === 'fully_paid' ? new Date(bill.updatedAt) : undefined
+      }));
+    } catch (error) {
+      console.error('Error getting credit card bills:', error);
+      return [];
+    }
   }
 
   async getRegularBills(): Promise<Bill[]> {
