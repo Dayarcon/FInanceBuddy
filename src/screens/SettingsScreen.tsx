@@ -39,8 +39,7 @@ export default function SettingsScreen() {
 
   const handleFixTransactions = async () => {
     try {
-      const db = await getDBConnection();
-      const fixedCount = fixIncorrectTransactionTypes(db);
+      const fixedCount = await fixIncorrectTransactionTypes();
       Alert.alert("Success", `Fixed ${fixedCount} incorrectly classified transactions`);
     } catch (error) {
       Alert.alert("Error", "Failed to fix transactions");
