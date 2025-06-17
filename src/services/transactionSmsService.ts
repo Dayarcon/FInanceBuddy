@@ -28,9 +28,8 @@ export const syncTransactionSMS = async (): Promise<{ success: boolean; count: n
             try {
               const transaction = parseTransactionSMS(sms);
               if (transaction) {
-                console.log(`Transaction: ${transaction.type} ${transaction.amount} ${transaction.paymentMethod} ${transaction.recipient || 'unknown'}`);
-                
-                // Check for duplicate transaction
+                console.log(`Transaction: ${transaction.type} Rs.${transaction.amount} to/from ${transaction.recipient}`);
+
                 const isDuplicate = await checkDuplicate('transactions', {
                   amount: transaction.amount,
                   date: transaction.date,
@@ -40,11 +39,10 @@ export const syncTransactionSMS = async (): Promise<{ success: boolean; count: n
                 });
 
                 if (isDuplicate) {
-                  console.log('Skipping duplicate transaction');
+                  console.log('Duplicate transaction skipped.');
                   continue;
                 }
 
-                // Insert transaction
                 const db = await getDBConnection();
                 const transactionId = await insertRecord(db, 'transactions', {
                   ...transaction,
@@ -53,7 +51,6 @@ export const syncTransactionSMS = async (): Promise<{ success: boolean; count: n
 
                 if (transactionId > 0) {
                   transactionCount++;
-                  console.log(`Added transaction: ${transaction.type} ${transaction.amount} ${transaction.paymentMethod} ${transaction.recipient || 'unknown'}`);
                 }
               }
             } catch (error) {
@@ -61,7 +58,6 @@ export const syncTransactionSMS = async (): Promise<{ success: boolean; count: n
             }
           }
 
-          console.log(`Sync completed. Added ${transactionCount} transactions`);
           resolve({ success: true, count: transactionCount });
         } catch (error) {
           console.error('Transaction SMS sync error:', error);
@@ -74,87 +70,70 @@ export const syncTransactionSMS = async (): Promise<{ success: boolean; count: n
 
 const parseTransactionSMS = (sms: SMS): Transaction | null => {
   const smsText = sms.body.toLowerCase();
-  console.log('SMS Text:', smsText);
-
-  // Check for credit/debit indicators
-  const hasDebit = smsText.includes('debited') || smsText.includes('spent') || smsText.includes('paid');
-  const hasCredit = smsText.includes('credited') || smsText.includes('received');
-  
-  console.log('Contains \'debited\':', hasDebit);
-  console.log('Contains \'credited\':', hasCredit);
+  console.log('Parsing SMS:', smsText);
 
   let type: TransactionType;
-  // Prioritize debit if the message contains 'debited' since ICICI messages show 'credited' for the recipient
-  if (hasDebit) {
-    console.log('Setting type to DEBIT based on debit indicators');
-    type = 'debit';
-  } else if (hasCredit) {
-    console.log('Setting type to CREDIT based on credit indicators');
-    type = 'credit';
+
+  // Improved transaction type detection
+  const smsTextLower = smsText.toLowerCase();
+  
+  // Check for UPI transactions first
+  if (smsTextLower.includes('upi')) {
+    // For UPI transactions, check the order of debited/credited
+    const debitedIndex = smsTextLower.indexOf('debited');
+    const creditedIndex = smsTextLower.indexOf('credited');
+    
+    if (debitedIndex !== -1 && creditedIndex !== -1) {
+      // If 'debited' appears before 'credited', it's a debit transaction
+      type = debitedIndex < creditedIndex ? 'debit' : 'credit';
+    } else if (debitedIndex !== -1) {
+      type = 'debit';
+    } else if (creditedIndex !== -1) {
+      type = 'credit';
+    }
   } else {
-    console.log('No clear transaction type found, defaulting to DEBIT');
-    type = 'debit';
+    // For non-UPI transactions, use the original logic
+    if (smsTextLower.includes('acct') && smsTextLower.includes('credited with')) {
+      type = 'credit';
+    } else if (smsTextLower.includes('debited')) {
+      type = 'debit';
+    } else if (smsTextLower.includes('credited')) {
+      type = 'credit';
+    }
   }
-  console.log('Final transaction type:', type);
+
+  // If type is still not determined, return null
+  if (!type) return null;
 
   // Extract amount
   const amountMatch = smsText.match(/rs\.?\s*([\d,]+\.?\d*)/i);
-  if (!amountMatch) {
-    console.log('No amount found in SMS');
-    return null;
-  }
+  if (!amountMatch) return null;
   const amount = parseFloat(amountMatch[1].replace(/,/g, ''));
-  if (isNaN(amount) || amount <= 0) {
-    console.log('Invalid amount found in SMS');
-    return null;
-  }
+  if (isNaN(amount) || amount <= 0) return null;
 
   // Extract date
-  const dateMatch = smsText.match(/(\d{1,2})[-/]([a-z]+)[-/](\d{2,4})/i);
-  if (!dateMatch) {
-    console.log('No date found in SMS');
-    return null;
-  }
-  const [, day, month, year] = dateMatch;
-  const monthIndex = getMonthIndex(month);
+  const dateMatch = smsText.match(/(\d{1,2})[-/](jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[-/](\d{2,4})/i);
+  if (!dateMatch) return null;
+  const [ , day, monthText, year ] = dateMatch;
+  const monthIndex = getMonthIndex(monthText);
   const fullYear = year.length === 2 ? `20${year}` : year;
   const date = new Date(parseInt(fullYear), monthIndex, parseInt(day)).toISOString();
 
-  // Extract payment method
+  // Determine payment method
   let paymentMethod: PaymentMethod = 'unknown';
-  if (smsText.includes('upi')) {
-    paymentMethod = 'upi';
-  } else if (smsText.includes('card')) {
-    paymentMethod = 'card';
-  } else if (smsText.includes('neft') || smsText.includes('imps')) {
-    paymentMethod = 'bank_transfer';
-  }
+  if (smsText.includes('upi')) paymentMethod = 'upi';
+  else if (smsText.includes('card')) paymentMethod = 'card';
+  else if (smsText.includes('neft') || smsText.includes('imps')) paymentMethod = 'bank_transfer';
 
-  // Extract recipient/sender
+  // Extract recipient or sender
   let recipient: string | null = null;
+
   if (type === 'credit') {
-    // For credits, look for sender
     const senderMatch = smsText.match(/from\s+([a-z\s]+)/i);
-    if (senderMatch) {
-      recipient = senderMatch[1].trim().toUpperCase();
-      console.log('Extracted sender for credit:', recipient);
-    } else {
-      console.log('No sender/recipient found in SMS');
-    }
+    if (senderMatch) recipient = senderMatch[1].trim().toUpperCase();
   } else {
-    // For debits, look for recipient
-    const recipientMatch = smsText.match(/to\s+([a-z\s]+)/i);
-    if (recipientMatch) {
-      recipient = recipientMatch[1].trim().toUpperCase();
-    } else {
-      // Try to extract name from capitalized words
-      const words = smsText.split(/\s+/);
-      const capitalizedWords = words.filter(word => /^[A-Z]/.test(word));
-      if (capitalizedWords.length > 0) {
-        recipient = capitalizedWords[0];
-        console.log('Extracted name from capitalized words:', recipient);
-      }
-    }
+    const creditNameMatch = smsText.match(/;\s*([a-z\s]+)\s+credited/i);
+    if (creditNameMatch) recipient = creditNameMatch[1].trim().toUpperCase();
   }
 
   return {
@@ -172,6 +151,5 @@ const getMonthIndex = (month: string): number => {
     'jan', 'feb', 'mar', 'apr', 'may', 'jun',
     'jul', 'aug', 'sep', 'oct', 'nov', 'dec'
   ];
-  const monthLower = month.toLowerCase();
-  return months.findIndex(m => monthLower.startsWith(m));
-}; 
+  return months.findIndex(m => month.toLowerCase().startsWith(m));
+};

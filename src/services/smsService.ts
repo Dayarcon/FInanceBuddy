@@ -89,11 +89,39 @@ const parseTransactionSMS = (sms: SMS): Transaction | null => {
   // Extract bank name first
   const bankName = messageParser.extractBankName(sms.body);
   
-  // Rest of the existing parsing logic...
-  const hasDebit = smsText.includes('debited') || smsText.includes('spent') || smsText.includes('paid');
-  const hasCredit = smsText.includes('credited') || smsText.includes('received');
+  // Improved transaction type detection
+  let type: TransactionType;
   
-  let type: TransactionType = hasCredit ? 'credit' : 'debit';
+  // Check for UPI transactions first
+  if (smsText.includes('upi')) {
+    // For UPI transactions, check specific patterns
+    if (smsText.includes('debited') && smsText.includes('credited')) {
+      // If it's a UPI transaction with both debited and credited
+      const debitedIndex = smsText.indexOf('debited');
+      const creditedIndex = smsText.indexOf('credited');
+      type = debitedIndex < creditedIndex ? 'debit' : 'credit';
+    } else if (smsText.includes('debited')) {
+      type = 'debit';
+    } else if (smsText.includes('credited')) {
+      type = 'credit';
+    } else if (smsText.includes('paid to') || smsText.includes('sent to')) {
+      type = 'debit';
+    } else if (smsText.includes('received from') || smsText.includes('received by')) {
+      type = 'credit';
+    } else {
+      // Default to debit for UPI transactions if no clear indication
+      type = 'debit';
+    }
+  } else {
+    // For non-UPI transactions
+    if (smsText.includes('debited')) {
+      type = 'debit';
+    } else if (smsText.includes('credited') || smsText.includes('received')) {
+      type = 'credit';
+    } else {
+      return null;
+    }
+  }
 
   // Extract amount
   const amountMatch = smsText.match(/rs\.?\s*([\d,]+\.?\d*)/i);
