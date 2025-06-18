@@ -153,6 +153,7 @@ const parseTransactionSMS = (sms: SMS): Transaction | null => {
   
   if (type === 'credit') {
     const senderPatterns = [
+      /from\s+([A-Z\s]+)/i, // General pattern for names in all caps
       /from\s+([a-z\s]+(?:bank|ltd|limited))/i,
       /received\s+from\s+([a-z\s]+)/i,
       /credited\s+by\s+([a-z\s]+)/i,
@@ -167,18 +168,26 @@ const parseTransactionSMS = (sms: SMS): Transaction | null => {
       }
     }
   } else {
-    const recipientPatterns = [
-      /to\s+([a-z\s]+(?:bank|ltd|limited))/i,
-      /paid\s+to\s+([a-z\s]+)/i,
-      /sent\s+to\s+([a-z\s]+)/i,
-      /recipient\s*:\s*([a-z\s]+)/i
-    ];
-    
-    for (const pattern of recipientPatterns) {
-      const match = sms.body.match(pattern);
-      if (match && match[1]) {
-        recipient = match[1].trim().toUpperCase();
-        break;
+    // For debit transactions, check ICICI Bank specific pattern first
+    const iciciDebitPattern = /debited[^;]+;\s*([a-z\s]+)\s+credited/i;
+    const iciciMatch = sms.body.match(iciciDebitPattern);
+    if (iciciMatch) {
+      recipient = iciciMatch[1].trim().toUpperCase();
+    } else {
+      // Fallback to other patterns
+      const recipientPatterns = [
+        /to\s+([a-z\s]+(?:bank|ltd|limited))/i,
+        /paid\s+to\s+([a-z\s]+)/i,
+        /sent\s+to\s+([a-z\s]+)/i,
+        /recipient\s*:\s*([a-z\s]+)/i
+      ];
+      
+      for (const pattern of recipientPatterns) {
+        const match = sms.body.match(pattern);
+        if (match && match[1]) {
+          recipient = match[1].trim().toUpperCase();
+          break;
+        }
       }
     }
   }
@@ -186,9 +195,14 @@ const parseTransactionSMS = (sms: SMS): Transaction | null => {
   // If no recipient found, try to extract from capitalized words
   if (!recipient) {
     const words = sms.body.split(/\s+/);
-    const capitalizedWords = words.filter(word => /^[A-Z]/.test(word));
+    const capitalizedWords = words.filter(word => /^[A-Z]/.test(word) && word.length > 2);
     if (capitalizedWords.length > 0) {
-      recipient = capitalizedWords[0];
+      // Skip common words like "ICICI", "BANK", "ACCT", "UPI", etc.
+      const skipWords = ['ICICI', 'BANK', 'ACCT', 'UPI', 'CALL', 'SMS', 'BLOCK', 'DEAR', 'CUSTOMER'];
+      const filteredWords = capitalizedWords.filter(word => !skipWords.includes(word));
+      if (filteredWords.length > 0) {
+        recipient = filteredWords[0];
+      }
     }
   }
 

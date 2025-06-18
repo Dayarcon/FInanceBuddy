@@ -164,11 +164,23 @@ const parseTransactionSMS = (sms: SMS): Transaction | null => {
   let recipient: string | null = null;
 
   if (type === 'credit') {
-    const senderMatch = smsText.match(/from\s+([a-z\s]+)/i);
+    let senderMatch = smsText.match(/from\s+([A-Z\s]+)/i);
+    if (!senderMatch) senderMatch = smsText.match(/from\s+([a-z\s]+(?:bank|ltd|limited))/i);
+    if (!senderMatch) senderMatch = smsText.match(/received\s+from\s+([a-z\s]+)/i);
+    if (!senderMatch) senderMatch = smsText.match(/credited\s+by\s+([a-z\s]+)/i);
+    if (!senderMatch) senderMatch = smsText.match(/sender\s*:\s*([a-z\s]+)/i);
     if (senderMatch) recipient = senderMatch[1].trim().toUpperCase();
   } else {
-    const creditNameMatch = smsText.match(/;\s*([a-z\s]+)\s+credited/i);
-    if (creditNameMatch) recipient = creditNameMatch[1].trim().toUpperCase();
+    // For debit transactions, check ICICI Bank specific pattern first
+    const iciciDebitPattern = /debited[^;]+;\s*([a-z\s]+)\s+credited/i;
+    const iciciMatch = sms.body.match(iciciDebitPattern);
+    if (iciciMatch) {
+      recipient = iciciMatch[1].trim().toUpperCase();
+    } else {
+      // Fallback to original pattern
+      const creditNameMatch = smsText.match(/;\s*([a-z\s]+)\s+credited/i);
+      if (creditNameMatch) recipient = creditNameMatch[1].trim().toUpperCase();
+    }
   }
 
   return {

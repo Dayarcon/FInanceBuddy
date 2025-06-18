@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "MyPersonalFinanceExpo",
-    "slug": "MyPersonalFinanceExpo",
-    "scheme": "mypersonalfinanceexpo",
+    "name": "FinanceBuddy",
+    "description": "A personal finance management app to track expenses, income, and budgets.",
+    "slug": "financebuddy",
+    "scheme": "financebuddy",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",

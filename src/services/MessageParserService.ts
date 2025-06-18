@@ -159,25 +159,50 @@ export class MessageParserService {
 
       if (!type) return null;
 
-      // Extract amount
-      const amountMatch = message.match(/Rs\.?\s*([\d,]+(\.\d{2})?)/i);
+      // Extract amount - improved pattern to handle various formats
+      const amountMatch = message.match(/Rs\.?\s*([\d,]+(?:\.\d{2})?)/i);
       if (!amountMatch) return null;
       const amount = parseFloat(amountMatch[1].replace(/,/g, ''));
+      if (isNaN(amount) || amount <= 0) return null;
 
-      // Extract date
-      const dateMatch = message.match(/(\d{2})-([A-Za-z]{3})-(\d{2})/);
+      // Extract date - improved pattern to handle both 2-digit and 4-digit years
+      const dateMatch = message.match(/(\d{2})-([A-Za-z]{3})-(\d{2,4})/);
       if (!dateMatch) return null;
-      const date = dateMatch[0];
+      const [, day, month, year] = dateMatch;
+      
+      // Convert month name to month index
+      const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+      const monthIndex = monthNames.indexOf(month.toLowerCase());
+      if (monthIndex === -1) return null;
+      
+      // Handle 2-digit vs 4-digit year
+      const fullYear = year.length === 2 ? `20${year}` : year;
+      const date = new Date(parseInt(fullYear), monthIndex, parseInt(day)).toISOString().split('T')[0];
 
-      // Extract party name
+      // Extract party name with improved patterns
       let party = '';
       if (type === 'credit') {
-        const creditMatch = message.match(/from\s+([^.]+)/i);
+        // For credit transactions, look for "from [PARTY]"
+        const creditMatch = message.match(/from\s+([^.]+?)(?:\s*\.|$)/i);
         party = creditMatch ? creditMatch[1].trim() : '';
       } else {
         // For debit transactions, look for the pattern: "debited for Rs X; [PARTY] credited"
-        const debitMatch = message.match(/debited[^;]+;\s*([^.]+)\s+credited/i);
-        party = debitMatch ? debitMatch[1].trim() : '';
+        const debitMatch = message.match(/debited[^;]+;\s*([^.]+?)\s+credited/i);
+        if (debitMatch) {
+          party = debitMatch[1].trim();
+        } else {
+          // Fallback: look for capitalized words that might be the recipient
+          const words = message.split(/\s+/);
+          const capitalizedWords = words.filter(word => /^[A-Z]/.test(word) && word.length > 2);
+          if (capitalizedWords.length > 0) {
+            // Skip common words like "ICICI", "Bank", "Acct", "UPI", etc.
+            const skipWords = ['ICICI', 'BANK', 'ACCT', 'UPI', 'CALL', 'SMS', 'BLOCK'];
+            const filteredWords = capitalizedWords.filter(word => !skipWords.includes(word));
+            if (filteredWords.length > 0) {
+              party = filteredWords[0];
+            }
+          }
+        }
       }
 
       // Extract UPI reference if present
