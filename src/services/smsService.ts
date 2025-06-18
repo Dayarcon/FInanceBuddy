@@ -53,6 +53,8 @@ export const syncSmsTransactions = async (): Promise<{ success: boolean; count?:
                   date: String(transaction.date),
                   type: String(transaction.type),
                   paymentMethod: String(transaction.paymentMethod),
+                  account: transaction.account ? String(transaction.account) : null,
+                  bank: transaction.bank ? String(transaction.bank) : null,
                   recipient: transaction.recipient ? String(transaction.recipient) : null,
                   source_sms: String(transaction.source_sms),
                   created_at: new Date().toISOString()
@@ -195,7 +197,7 @@ const parseTransactionSMS = (sms: SMS): Transaction | null => {
     date,
     type,
     paymentMethod,
-    account: bankName,
+    bank: bankName,
     recipient,
     source_sms: sms.body
   };

@@ -72,6 +72,41 @@ const parseTransactionSMS = (sms: SMS): Transaction | null => {
   const smsText = sms.body.toLowerCase();
   console.log('Parsing SMS:', smsText);
 
+  // Extract bank name
+  let bankName = 'Unknown Bank';
+  const commonBanks = [
+    // Public Sector Banks
+    'State Bank of India', 'Punjab National Bank', 'Bank of Baroda', 'Canara Bank', 'Union Bank of India',
+    'Indian Bank', 'Bank of India', 'Central Bank of India', 'Indian Overseas Bank', 'UCO Bank',
+    'Bank of Maharashtra', 'Punjab & Sind Bank',
+  
+    // Private Sector Banks
+    'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak Mahindra Bank', 'IndusInd Bank', 'Yes Bank',
+    'Federal Bank', 'IDFC FIRST Bank', 'South Indian Bank', 'Karur Vysya Bank', 'City Union Bank',
+    'RBL Bank', 'Bandhan Bank', 'DCB Bank', 'CSB Bank',
+  
+    // Foreign Banks
+    'Citibank', 'HSBC Bank', 'Standard Chartered Bank', 'Deutsche Bank', 'DBS Bank',
+    'Barclays Bank', 'Bank of America', 'JPMorgan Chase Bank', 'BNP Paribas', 'Credit Suisse',
+  
+    // Small Finance Banks
+    'AU Small Finance Bank', 'Ujjivan Small Finance Bank', 'Equitas Small Finance Bank',
+    'ESAF Small Finance Bank', 'Fincare Small Finance Bank', 'Jana Small Finance Bank',
+    'Suryoday Small Finance Bank', 'Utkarsh Small Finance Bank', 'North East Small Finance Bank',
+    'Shivalik Small Finance Bank',
+  
+    // Cooperative Banks (popular ones)
+    'Saraswat Bank', 'Cosmos Bank', 'TJSB Sahakari Bank', 'NKGSB Bank', 'Apna Sahakari Bank'
+  ];
+  
+  
+  for (const bank of commonBanks) {
+    if (sms.body.toLowerCase().includes(bank.toLowerCase())) {
+      bankName = bank;
+      break;
+    }
+  }
+
   let type: TransactionType;
 
   // Improved transaction type detection
@@ -141,6 +176,7 @@ const parseTransactionSMS = (sms: SMS): Transaction | null => {
     date,
     type,
     paymentMethod,
+    bank: bankName,
     recipient,
     source_sms: sms.body
   };

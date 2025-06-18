@@ -9,6 +9,7 @@ export type Transaction = {
   type: string;
   paymentMethod: PaymentMethod;
   account?: string | null;
+  bank?: string | null;
   category?: string | null;
   notes?: string | null;
   source_sms?: string | null;

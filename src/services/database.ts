@@ -191,6 +191,7 @@ export const getAllTransactions = async (db: SQLite.WebSQLDatabase): Promise<Tra
       type: String(item.type) as TransactionType,
       paymentMethod: String(item.paymentMethod) as PaymentMethod,
       account: item.account ? String(item.account) : undefined,
+      bank: item.bank ? String(item.bank) : undefined,
       category: item.category ? String(item.category) : undefined,
       notes: item.notes ? String(item.notes) : undefined,
       source_sms: item.source_sms ? String(item.source_sms) : undefined,
@@ -239,6 +240,7 @@ export const createTables = async () => {
           type TEXT,
           paymentMethod TEXT,
           account TEXT,
+          bank TEXT,
           notes TEXT,
           source_sms TEXT,
           recipient TEXT,
@@ -376,14 +378,15 @@ export const saveTransaction = async (txn: Transaction) => {
       db.transaction(tx => {
         tx.executeSql(
           `INSERT INTO transactions 
-            (date, amount, type, paymentMethod, account, category, notes, source_sms, recipient) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            (date, amount, type, paymentMethod, account, bank, category, notes, source_sms, recipient) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
             String(txn.date),
             Number(txn.amount),
             String(txn.type),
             String(txn.paymentMethod),
             txn.account ? String(txn.account) : null,
+            txn.bank ? String(txn.bank) : null,
             txn.category ? String(txn.category) : null,
             txn.notes ? String(txn.notes) : null,
             txn.source_sms ? String(txn.source_sms) : null,
@@ -494,6 +497,80 @@ export const fixRecipientInformation = async () => {
     return fixedCount;
   } catch (error) {
     console.error('Error in fixRecipientInformation:', error);
+    throw error;
+  }
+};
+
+export const fixBankInformation = async () => {
+  try {
+    const db = getDBConnection();
+    const transactions = await getAllTransactions(db);
+    let fixedCount = 0;
+
+    const commonBanks = [
+      // Public Sector Banks
+      'State Bank of India', 'Punjab National Bank', 'Bank of Baroda', 'Canara Bank', 'Union Bank of India',
+      'Indian Bank', 'Bank of India', 'Central Bank of India', 'Indian Overseas Bank', 'UCO Bank',
+      'Bank of Maharashtra', 'Punjab & Sind Bank',
+    
+      // Private Sector Banks
+      'HDFC Bank', 'ICICI Bank', 'Axis Bank', 'Kotak Mahindra Bank', 'IndusInd Bank', 'Yes Bank',
+      'Federal Bank', 'IDFC FIRST Bank', 'South Indian Bank', 'Karur Vysya Bank', 'City Union Bank',
+      'RBL Bank', 'Bandhan Bank', 'DCB Bank', 'CSB Bank',
+    
+      // Foreign Banks
+      'Citibank', 'HSBC Bank', 'Standard Chartered Bank', 'Deutsche Bank', 'DBS Bank',
+      'Barclays Bank', 'Bank of America', 'JPMorgan Chase Bank', 'BNP Paribas', 'Credit Suisse',
+    
+      // Small Finance Banks
+      'AU Small Finance Bank', 'Ujjivan Small Finance Bank', 'Equitas Small Finance Bank',
+      'ESAF Small Finance Bank', 'Fincare Small Finance Bank', 'Jana Small Finance Bank',
+      'Suryoday Small Finance Bank', 'Utkarsh Small Finance Bank', 'North East Small Finance Bank',
+      'Shivalik Small Finance Bank',
+    
+      // Cooperative Banks (popular ones)
+      'Saraswat Bank', 'Cosmos Bank', 'TJSB Sahakari Bank', 'NKGSB Bank', 'Apna Sahakari Bank'
+    ];
+    
+
+    for (const txn of transactions) {
+      if (!txn.source_sms || !txn.id) continue;
+
+      // Extract bank name from SMS
+      let bankName = 'Unknown Bank';
+      for (const bank of commonBanks) {
+        if (txn.source_sms.toLowerCase().includes(bank.toLowerCase())) {
+          bankName = bank;
+          break;
+        }
+      }
+
+      // Update if bank information is missing or different
+      if (!txn.bank || txn.bank === 'Unknown Bank') {
+        await new Promise<void>((resolve, reject) => {
+          db.transaction(tx => {
+            tx.executeSql(
+              `UPDATE transactions SET bank = ? WHERE id = ?`,
+              [String(bankName), Number(txn.id)],
+              () => {
+                fixedCount++;
+                resolve();
+              },
+              (_, error) => {
+                console.error('Error updating bank:', error);
+                reject(error);
+                return false;
+              }
+            );
+          });
+        });
+      }
+    }
+
+    console.log(`Fixed ${fixedCount} bank information entries`);
+    return fixedCount;
+  } catch (error) {
+    console.error('Error in fixBankInformation:', error);
     throw error;
   }
 };

@@ -413,6 +413,16 @@ export default function TransactionsScreen() {
                 </View>
               </View>
 
+              {selectedTransaction.source_sms && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Source SMS:</Text>
+                  <View style={styles.smsContent}>
+                    <Ionicons name="chatbubble" size={16} color="#666" />
+                    <Text style={[styles.detailValue, styles.smsText]}>{selectedTransaction.source_sms}</Text>
+                  </View>
+                </View>
+              )}
+
               <TouchableOpacity
                 style={styles.closeButton}
                 onPress={() => setSelectedTransaction(null)}
@@ -891,6 +901,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     flex: 1,
     textAlign: 'right',
+  },
+  smsContent: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    flex: 1,
+  },
+  smsText: {
+    textAlign: 'left',
+    flex: 1,
+    lineHeight: 20,
   },
   filterContainer: {
     marginBottom: 20,
