@@ -45,7 +45,7 @@ interface TrainingData {
 export const categoryRules: Record<Category, CategoryDefinition> = {
   'Food & Dining': {
     name: 'Food & Dining',
-    keywords: ['zomato', 'swiggy', 'restaurant', 'cafe', 'coffee', 'food delivery', 'food', 'dining', 'restaurant', 'cafe', 'coffee shop', 'food court'],
+    keywords: ['zomato', 'swiggy', 'restaurants', 'restaur','restaurant', 'foodpanda', 'dominos', 'kfc', 'burger king', 'mcdonalds', 'cafe', 'caf', 'coffee', 'food delivery', 'food', 'dining', 'restaurant', 'cafe', 'coffee shop', 'food court'],
     color: '#FF9800',
     icon: 'restaurant'
   },
