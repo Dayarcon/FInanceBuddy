@@ -244,6 +244,10 @@ export const createTables = async () => {
           notes TEXT,
           source_sms TEXT,
           recipient TEXT,
+          confidence REAL DEFAULT 0.0,
+          ai_features TEXT,
+          enhanced_category TEXT,
+          processing_time INTEGER DEFAULT 0,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
       `, [], () => resolve(), (_, error) => {

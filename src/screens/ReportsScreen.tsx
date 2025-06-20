@@ -394,97 +394,72 @@ export default function ReportsScreen() {
       </View>
 
       {/* Spending by Bank */}
-      <View style={styles.sectionContainer}>
-        <Text style={styles.sectionTitle}>Spending from Banks - {formatMonthYear(selectedMonth)}</Text>
-        {spendingByBank.length > 0 ? (
-          <FlatList
-            data={spendingByBank}
-            renderItem={renderBankItem}
-            keyExtractor={(item) => item.bank}
-            scrollEnabled={false}
-            style={styles.spendingList}
-          />
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Spending by Bank</Text>
+        {(spendingByBank || []).length === 0 ? (
+          <Text style={styles.emptyText}>No bank data available.</Text>
         ) : (
-          <View style={styles.noDataContainer}>
-            <Ionicons name="information-circle" size={32} color="#ccc" />
-            <Text style={styles.noDataText}>No bank spending data available for {formatMonthYear(selectedMonth)}</Text>
-          </View>
+          (spendingByBank || []).map((item, index) => (
+            <View key={item.bank} style={styles.card}>
+              <View style={styles.cardRow}>
+                <Ionicons name="card" size={22} color="#007AFF" style={{ marginRight: 12 }} />
+                <Text style={styles.cardTitle}>{item.bank}</Text>
+                <Text style={styles.cardAmount}>₹{item.amount.toFixed(2)}</Text>
+              </View>
+              <Text style={styles.cardCount}>{item.count} transactions</Text>
+            </View>
+          ))
         )}
       </View>
 
       {/* Spending by Place */}
-      <View style={styles.sectionContainer}>
-        <Text style={styles.sectionTitle}>Spending at Places - {formatMonthYear(selectedMonth)}</Text>
-        {spendingByPlace.length > 0 ? (
-          <FlatList
-            data={spendingByPlace}
-            renderItem={renderSpendingItem}
-            keyExtractor={(item) => item.place}
-            scrollEnabled={false}
-            style={styles.spendingList}
-          />
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Spending by Place</Text>
+        {(spendingByPlace || []).length === 0 ? (
+          <Text style={styles.emptyText}>No place data available.</Text>
         ) : (
-          <View style={styles.noDataContainer}>
-            <Ionicons name="information-circle" size={32} color="#ccc" />
-            <Text style={styles.noDataText}>No place spending data available for {formatMonthYear(selectedMonth)}</Text>
-          </View>
+          (spendingByPlace || []).map((item, index) => (
+            <View key={item.place} style={styles.card}>
+              <View style={styles.cardRow}>
+                <Ionicons name="location" size={22} color="#FF9800" style={{ marginRight: 12 }} />
+                <Text style={styles.cardTitle}>{item.place}</Text>
+                <Text style={styles.cardAmount}>₹{item.amount.toFixed(2)}</Text>
+              </View>
+              <Text style={styles.cardCount}>{item.count} transactions</Text>
+            </View>
+          ))
         )}
       </View>
 
       {/* Spending by Category */}
-      <View style={styles.sectionContainer}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Spending by Category - {formatMonthYear(selectedMonth)}</Text>
-          <TouchableOpacity 
-            style={styles.categoryRulesButton}
-            onPress={() => setShowCategoryRules(true)}
-          >
-            <Ionicons name="settings" size={20} color="#007AFF" />
-            <Text style={styles.categoryRulesButtonText}>Rules</Text>
-          </TouchableOpacity>
-        </View>
-        
-        {/* Category Pie Chart */}
-        {spendingByCategory.length > 0 && (
-          <View style={styles.chartCard}>
-            <PieChart
-              data={spendingByCategory.map(item => ({
-                name: item.category,
-                amount: item.amount,
-                color: item.color,
-                legendFontColor: '#333',
-                legendFontSize: 12
-              }))}
-              width={Dimensions.get('window').width - 80}
-              height={200}
-              chartConfig={{
-                backgroundColor: '#fff',
-                backgroundGradientFrom: '#fff',
-                backgroundGradientTo: '#fff',
-                color: () => '#000',
-              }}
-              accessor="amount"
-              backgroundColor="transparent"
-              paddingLeft="10"
-              absolute
-            />
-          </View>
-        )}
-        
-        {spendingByCategory.length > 0 ? (
-          <FlatList
-            data={spendingByCategory}
-            renderItem={renderCategoryItem}
-            keyExtractor={(item) => item.category}
-            scrollEnabled={false}
-            style={styles.spendingList}
-          />
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Spending by Category</Text>
+        {(spendingByCategory || []).length === 0 ? (
+          <Text style={styles.emptyText}>No category data available.</Text>
         ) : (
-          <View style={styles.noDataContainer}>
-            <Ionicons name="information-circle" size={32} color="#ccc" />
-            <Text style={styles.noDataText}>No category spending data available for {formatMonthYear(selectedMonth)}</Text>
-          </View>
+          (spendingByCategory || []).map((item, index) => (
+            <View key={item.category} style={styles.card}>
+              <View style={styles.cardRow}>
+                <Ionicons name={item.icon as any} size={22} color={item.color} style={{ marginRight: 12 }} />
+                <Text style={styles.cardTitle}>{item.category}</Text>
+                <Text style={styles.cardAmount}>₹{item.amount.toFixed(2)}</Text>
+              </View>
+              <Text style={styles.cardCount}>{item.count} transactions</Text>
+            </View>
+          ))
         )}
+      </View>
+
+      {/* Summary Section */}
+      <View style={styles.summarySection}>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryLabel}>Total Credit</Text>
+          <Text style={styles.summaryValue}>₹{summary.credit.toFixed(2)}</Text>
+        </View>
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryLabel}>Total Debit</Text>
+          <Text style={styles.summaryValue}>₹{summary.debit.toFixed(2)}</Text>
+        </View>
       </View>
 
       {/* Month Picker Modal */}
@@ -788,20 +763,74 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  sectionContainer: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingHorizontal: 4,
+  section: {
+    padding: 20,
   },
   sectionTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#1a1a1a',
+    color: '#222',
+    marginBottom: 14,
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  cardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+  },
+  cardAmount: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  cardCount: {
+    fontSize: 13,
+    color: '#888',
+    marginLeft: 34,
+  },
+  summarySection: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginVertical: 20,
+  },
+  summaryCard: {
+    backgroundColor: '#e0e7ff',
+    borderRadius: 12,
+    padding: 18,
+    alignItems: 'center',
+    minWidth: 120,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#222',
+  },
+  emptyText: {
+    fontSize: 15,
+    color: '#888',
+    textAlign: 'center',
+    marginVertical: 10,
   },
   spendingList: {
     backgroundColor: '#fff',

@@ -1,6 +1,7 @@
 import { getDBConnection, executeQuery, insertRecord, checkDuplicate } from './database';
 import { Transaction, TransactionType, PaymentMethod } from '../types/transaction';
 import SmsAndroid from 'react-native-get-sms-android';
+import { enhancedAISmsService } from './EnhancedAISmsService';
 
 type SMS = {
   body: string;
@@ -24,39 +25,60 @@ export const syncTransactionSMS = async (): Promise<{ success: boolean; count: n
           const smsArray = JSON.parse(smsList);
           let transactionCount = 0;
 
+          console.log(`🤖 AI Processing ${smsArray.length} transaction SMS messages...`);
+
           for (const sms of smsArray) {
             try {
-              const transaction = parseTransactionSMS(sms);
-              if (transaction) {
-                console.log(`Transaction: ${transaction.type} Rs.${transaction.amount} to/from ${transaction.recipient}`);
+              // Use AI processing instead of basic parsing
+              const aiResult = await enhancedAISmsService.processSingleSMSWithAI(sms);
+              
+              if (aiResult.transaction) {
+                console.log(`🤖 AI Transaction: ${aiResult.transaction.type} Rs.${aiResult.transaction.amount} ${aiResult.category} (${(aiResult.confidence * 100).toFixed(1)}% confidence)`);
+                transactionCount++;
+              } else {
+                // Fallback to basic parsing if AI fails
+                const transaction = parseTransactionSMS(sms);
+                if (transaction) {
+                  console.log(`📱 Basic Transaction: ${transaction.type} Rs.${transaction.amount} to/from ${transaction.recipient}`);
 
-                const isDuplicate = await checkDuplicate('transactions', {
-                  amount: transaction.amount,
-                  date: transaction.date,
-                  type: transaction.type,
-                  paymentMethod: transaction.paymentMethod,
-                  recipient: transaction.recipient
-                });
+                  const isDuplicate = await checkDuplicate('transactions', {
+                    amount: transaction.amount,
+                    date: transaction.date,
+                    type: transaction.type,
+                    paymentMethod: transaction.paymentMethod,
+                    recipient: transaction.recipient
+                  });
 
-                if (isDuplicate) {
-                  console.log('Duplicate transaction skipped.');
-                  continue;
-                }
+                  if (isDuplicate) {
+                    console.log('Duplicate transaction skipped.');
+                    continue;
+                  }
 
-                const db = await getDBConnection();
-                const transactionId = await insertRecord(db, 'transactions', {
-                  ...transaction,
-                  createdAt: new Date().toISOString()
-                });
+                  const db = await getDBConnection();
+                  const transactionId = await insertRecord(db, 'transactions', {
+                    ...transaction,
+                    confidence: 0.5, // Basic parsing confidence
+                    ai_features: JSON.stringify({ method: 'basic_parsing' }),
+                    enhanced_category: 'basic_parsed',
+                    processing_time: 0,
+                    created_at: new Date().toISOString()
+                  });
 
-                if (transactionId > 0) {
-                  transactionCount++;
+                  if (transactionId > 0) {
+                    transactionCount++;
+                  }
                 }
               }
             } catch (error) {
               console.error('Error processing SMS:', error);
             }
           }
+
+          // Get AI processing statistics
+          const stats = enhancedAISmsService.getStats();
+          
+          console.log(`🤖 AI Transaction Sync completed. Added ${transactionCount} transactions`);
+          console.log(`📊 AI Stats: ${stats.successful} AI processed, ${stats.failed} failed, ${(stats.averageConfidence * 100).toFixed(1)}% avg confidence`);
 
           resolve({ success: true, count: transactionCount });
         } catch (error) {

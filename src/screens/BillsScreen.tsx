@@ -14,6 +14,8 @@ import {
 } from 'react-native';
 import { Bill, billService } from '../services/BillService';
 import { BillsStackParamList } from '../types/navigation';
+// @ts-ignore
+import { LinearGradient } from 'expo-linear-gradient';
 
 type BillsScreenNavigationProp = NativeStackNavigationProp<BillsStackParamList>;
 
@@ -134,25 +136,29 @@ const BillsScreen = () => {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
-      </View>
+      <LinearGradient colors={["#e0e7ff", "#fff"]} style={styles.gradient}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+        </View>
+      </LinearGradient>
     );
   }
 
   if (error) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={loadFilteredBills}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
+      <LinearGradient colors={["#e0e7ff", "#fff"]} style={styles.gradient}>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={loadFilteredBills}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <LinearGradient colors={["#e0e7ff", "#fff"]} style={styles.gradient}>
       <View style={styles.header}>
         <Text style={styles.title}>Bills</Text>
         <TouchableOpacity
@@ -226,14 +232,18 @@ const BillsScreen = () => {
       <TouchableOpacity
         style={styles.addButton}
         onPress={() => navigation.navigate('AddBill')}
+        activeOpacity={0.85}
       >
-        <Ionicons name="add" size={24} color="#FFFFFF" />
+        <Ionicons name="add" size={28} color="#FFFFFF" />
       </TouchableOpacity>
-    </View>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: '#F5F5F5',
@@ -269,27 +279,30 @@ const styles = StyleSheet.create({
   filterContainer: {
     flexDirection: 'row',
     padding: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    backgroundColor: 'transparent',
+    borderBottomWidth: 0,
+    marginBottom: 4,
   },
   filterButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
     marginRight: 8,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: '#e0e7ff',
+    elevation: 1,
   },
   activeFilter: {
     backgroundColor: '#007AFF',
+    elevation: 2,
   },
   filterText: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#666666',
+    fontWeight: '500',
   },
   activeFilterText: {
     color: '#FFFFFF',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   listContainer: {
     padding: 16,
@@ -376,22 +389,19 @@ const styles = StyleSheet.create({
   },
   addButton: {
     position: 'absolute',
-    right: 16,
-    bottom: 16,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    right: 24,
+    bottom: 24,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
   },
   loadingContainer: {
     flex: 1,

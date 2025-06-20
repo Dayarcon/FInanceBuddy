@@ -11,11 +11,14 @@ import {
     Text,
     TextInput,
     TouchableOpacity,
-    View
+    View,
+    Clipboard
 } from 'react-native';
 import { getAllTransactions, getDBConnection } from '../services/database';
 import { Transaction } from '../types/transaction';
 import { transactionCategorizer, Category, categoryRules, getCategoryDefinition } from '../utils/transactionCategorizer';
+// @ts-ignore
+import { LinearGradient } from 'expo-linear-gradient';
 
 type FilterType = 'all' | 'credit' | 'debit';
 type SortType = 'date' | 'amount' | 'bank';
@@ -36,6 +39,7 @@ export default function TransactionsScreen() {
   const [selectedTransactionForEdit, setSelectedTransactionForEdit] = useState<Transaction | null>(null);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [transactionCategories, setTransactionCategories] = useState<Record<string, string>>({});
+  const [categorySearch, setCategorySearch] = useState('');
   const router = useRouter();
 
   const months = [
@@ -291,8 +295,8 @@ export default function TransactionsScreen() {
                     onPress={() => setFilter(type)}
                   >
                     <Text style={[
-                      styles.filterButtonText,
-                      filter === type && styles.filterButtonTextActive
+                      styles.filterText,
+                      filter === type && styles.activeFilterText
                     ]}>
                       {type.charAt(0).toUpperCase() + type.slice(1)}
                     </Text>
@@ -314,8 +318,8 @@ export default function TransactionsScreen() {
                 onPress={() => setSortBy(type)}
               >
                 <Text style={[
-                  styles.filterButtonText,
-                  sortBy === type && styles.filterButtonTextActive
+                  styles.filterText,
+                  sortBy === type && styles.activeFilterText
                 ]}>
                   {type.charAt(0).toUpperCase() + type.slice(1)}
                 </Text>
@@ -342,58 +346,51 @@ export default function TransactionsScreen() {
       onRequestClose={() => setSelectedTransaction(null)}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+        <View style={styles.detailCard}>
           {selectedTransaction && (
             <>
-              <Text style={styles.modalTitle}>Transaction Details</Text>
-              
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Amount:</Text>
-                <Text style={[
-                  styles.detailValue,
-                  { color: selectedTransaction.type === 'credit' ? '#4CAF50' : '#F44336' }
-                ]}>
-                  {selectedTransaction.type === 'credit' ? '+' : '-'}₹{selectedTransaction.amount.toFixed(2)}
-                </Text>
+              <View style={styles.detailIconRow}>
+                <Ionicons
+                  name={selectedTransaction.type === 'credit' ? 'arrow-down-circle' : 'arrow-up-circle'}
+                  size={40}
+                  color={selectedTransaction.type === 'credit' ? '#4CAF50' : '#F44336'}
+                  style={{ marginBottom: 8 }}
+                />
               </View>
-
+              <Text style={styles.detailAmount}>
+                {selectedTransaction.type === 'credit' ? '+' : '-'}₹{selectedTransaction.amount.toFixed(2)}
+              </Text>
+              <View style={styles.detailDivider} />
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Type:</Text>
                 <Text style={styles.detailValue}>
                   {selectedTransaction.type.charAt(0).toUpperCase() + selectedTransaction.type.slice(1)}
                 </Text>
               </View>
-
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Date:</Text>
                 <Text style={styles.detailValue}>
                   {new Date(selectedTransaction.date).toLocaleString()}
                 </Text>
               </View>
-
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Bank:</Text>
                 <Text style={styles.detailValue}>{selectedTransaction.bank || 'Unknown'}</Text>
               </View>
-
               {selectedTransaction.recipient && (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>
                     {selectedTransaction.type === 'debit' ? 'To:' : 'From:'}
                   </Text>
-                  <Text style={[styles.detailValue, { fontWeight: '500', color: '#333' }]}>
-                    {selectedTransaction.recipient}
-                  </Text>
+                  <Text style={[styles.detailValue, { fontWeight: '500', color: '#333' }]}> {selectedTransaction.recipient}</Text>
                 </View>
               )}
-
               {selectedTransaction.notes && (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Notes:</Text>
                   <Text style={styles.detailValue}>{selectedTransaction.notes}</Text>
                 </View>
               )}
-
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Category:</Text>
                 <View style={styles.categoryContainer}>
@@ -404,25 +401,27 @@ export default function TransactionsScreen() {
                     return (
                       <>
                         <Ionicons name={categoryDef.icon as any} size={16} color={categoryDef.color} />
-                        <Text style={[styles.detailValue, { color: categoryDef.color, fontWeight: '600' }]}>
-                          {category}
-                        </Text>
+                        <Text style={[styles.detailValue, { color: categoryDef.color, fontWeight: '600', marginLeft: 4 }]}> {category}</Text>
                       </>
                     );
                   })()}
                 </View>
               </View>
-
               {selectedTransaction.source_sms && (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Source SMS:</Text>
                   <View style={styles.smsContent}>
                     <Ionicons name="chatbubble" size={16} color="#666" />
-                    <Text style={[styles.detailValue, styles.smsText]}>{selectedTransaction.source_sms}</Text>
+                    <Text style={[styles.detailValue, styles.smsText]} numberOfLines={3} ellipsizeMode="tail">{selectedTransaction.source_sms}</Text>
+                    <TouchableOpacity
+                      style={styles.copyButton}
+                      onPress={() => Clipboard.setString(selectedTransaction.source_sms)}
+                    >
+                      <Ionicons name="copy" size={18} color="#007AFF" />
+                    </TouchableOpacity>
                   </View>
                 </View>
               )}
-
               <TouchableOpacity
                 style={styles.closeButton}
                 onPress={() => setSelectedTransaction(null)}
@@ -436,317 +435,197 @@ export default function TransactionsScreen() {
     </Modal>
   );
 
-  const summary = getTransactionSummary();
-
-  return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.title}>{getFilterTitle()}</Text>
-        <TouchableOpacity style={styles.filterButton} onPress={() => setShowFilters(true)}>
-          <Text style={styles.filterButtonText}>Filter</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Month Selector */}
-      <View style={styles.monthSelector}>
-        <TouchableOpacity 
-          style={styles.monthButton}
-          onPress={() => changeMonth('prev')}
-        >
-          <Ionicons name="chevron-back" size={24} color="#007AFF" />
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.monthDisplay}
-          onPress={() => setShowMonthPicker(true)}
-        >
-          <Ionicons name="calendar" size={20} color="#666" />
-          <Text style={styles.monthText}>{formatMonthYear(selectedMonth)}</Text>
-          <Ionicons name="chevron-down" size={16} color="#666" />
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.monthButton}
-          onPress={() => changeMonth('next')}
-        >
-          <Ionicons name="chevron-forward" size={24} color="#007AFF" />
-        </TouchableOpacity>
-      </View>
-
-      {/* Search Bar */}
-      <TextInput
-        style={styles.searchInput}
-        placeholder="Search transactions..."
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-      />
-
-      {/* Summary Cards */}
-      <View style={styles.summaryContainer}>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Total</Text>
-          <Text style={styles.summaryValue}>{summary.total}</Text>
-        </View>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Credit</Text>
-          <Text style={[styles.summaryValue, { color: '#4CAF50' }]}>₹{summary.credit.toFixed(2)}</Text>
-        </View>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Debit</Text>
-          <Text style={[styles.summaryValue, { color: '#F44336' }]}>₹{summary.debit.toFixed(2)}</Text>
-        </View>
-      </View>
-
-      {/* Transactions List */}
-      <FlatList
-        data={filteredTransactions}
-        keyExtractor={(item) => item.id?.toString() || ''}
-        renderItem={renderTransaction}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            {loading ? (
-              <Text style={styles.emptyText}>Loading transactions...</Text>
-            ) : (
-              <Text style={styles.emptyText}>No transactions found for {formatMonthYear(selectedMonth)}</Text>
-            )}
-          </View>
-        }
-        style={styles.transactionList}
-      />
-
-      {renderFilterModal()}
-      {renderTransactionDetailModal()}
-      
-      {/* Month Picker Modal */}
-      <Modal
-        visible={showMonthPicker}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowMonthPicker(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Month</Text>
-            
-            <View style={styles.monthGrid}>
-              {months.map((month, index) => {
-                const monthDate = new Date(selectedMonth.getFullYear(), index);
-                const isSelected = selectedMonth.getMonth() === index;
-                
-                return (
-                  <TouchableOpacity
-                    key={month}
-                    style={[
-                      styles.monthOption,
-                      isSelected && styles.monthOptionSelected
-                    ]}
-                    onPress={() => {
-                      setSelectedMonth(monthDate);
-                      setShowMonthPicker(false);
-                    }}
-                  >
-                    <Text style={[
-                      styles.monthOptionText,
-                      isSelected && styles.monthOptionTextSelected
-                    ]}>
-                      {month}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setShowMonthPicker(false)}
-            >
-              <Text style={styles.closeButtonText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-      
-      <Modal
-        visible={showCategoryPicker}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowCategoryPicker(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Change Category</Text>
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => setShowCategoryPicker(false)}
-              >
-                <Ionicons name="close" size={24} color="#666" />
-              </TouchableOpacity>
-            </View>
-            
-            <ScrollView style={styles.categoryList}>
-              {Object.entries(categoryRules).map(([category, definition]) => (
+  const renderCategoryPickerModal = () => (
+    <Modal
+      visible={showCategoryPicker}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowCategoryPicker(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Select Category</Text>
+          <ScrollView style={styles.categoryList}>
+            {Object.values(categoryRules).map((catDef) => {
+              const isSelected = selectedTransactionForEdit &&
+                (selectedTransactionForEdit.category || transactionCategories[selectedTransactionForEdit.id]) === catDef.name;
+              return (
                 <TouchableOpacity
-                  key={category}
-                  style={styles.categoryItem}
-                  onPress={() => {
+                  key={catDef.name}
+                  style={[
+                    styles.categoryItem,
+                    isSelected && { backgroundColor: catDef.color + '22' }
+                  ]}
+                  onPress={async () => {
                     if (selectedTransactionForEdit) {
-                      handleCategoryChange(selectedTransactionForEdit, category as Category);
+                      await handleCategoryChange(selectedTransactionForEdit, catDef.name);
+                      setShowCategoryPicker(false);
                     }
-                    setShowCategoryPicker(false);
                   }}
                 >
                   <View style={styles.categoryItemContent}>
-                    <Ionicons name={definition.icon as any} size={20} color={definition.color} />
-                    <Text style={[styles.categoryItemText, { color: definition.color }]}>
-                      {category}
-                    </Text>
+                    <Ionicons name={catDef.icon as any} size={20} color={catDef.color} />
+                    <Text style={[styles.categoryItemText, { color: catDef.color, fontWeight: isSelected ? 'bold' : '500' }]}>{catDef.name}</Text>
+                    {isSelected && <Ionicons name="checkmark-circle" size={18} color={catDef.color} style={{ marginLeft: 8 }} />}
                   </View>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
+              );
+            })}
+          </ScrollView>
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={() => setShowCategoryPicker(false)}
+          >
+            <Text style={styles.closeButtonText}>Cancel</Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
-    </View>
+      </View>
+    </Modal>
+  );
+
+  const summary = getTransactionSummary();
+
+  return (
+    <LinearGradient colors={["#e0e7ff", "#fff"]} style={styles.gradient}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Transactions</Text>
+        <TouchableOpacity
+          style={styles.filterIconButton}
+          onPress={() => setShowFilters(true)}
+        >
+          <Ionicons name="filter" size={24} color="#007AFF" />
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.filterContainer}>
+        <TouchableOpacity
+          style={[styles.filterButton, filter === 'all' && styles.activeFilter]}
+          onPress={() => setFilter('all')}
+        >
+          <Text style={[styles.filterText, filter === 'all' && styles.activeFilterText]}>All</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterButton, filter === 'credit' && styles.activeFilter]}
+          onPress={() => setFilter('credit')}
+        >
+          <Text style={[styles.filterText, filter === 'credit' && styles.activeFilterText]}>Credit</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterButton, filter === 'debit' && styles.activeFilter]}
+          onPress={() => setFilter('debit')}
+        >
+          <Text style={[styles.filterText, filter === 'debit' && styles.activeFilterText]}>Debit</Text>
+        </TouchableOpacity>
+      </View>
+
+      <FlatList
+        data={filteredTransactions}
+        renderItem={renderTransaction}
+        keyExtractor={(item) => item.id?.toString() || Math.random().toString()}
+        contentContainerStyle={styles.listContainer}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Ionicons name="list" size={48} color="#CCCCCC" />
+            <Text style={styles.emptyText}>No transactions found</Text>
+            <Text style={styles.emptySubtext}>Add a new transaction to get started</Text>
+          </View>
+        }
+        refreshing={loading}
+        onRefresh={onRefresh}
+      />
+
+      <TouchableOpacity
+        style={styles.addButton}
+        onPress={() => router.push('/add-transaction')}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="add" size={28} color="#FFFFFF" />
+      </TouchableOpacity>
+
+      {renderFilterModal()}
+      {renderTransactionDetailModal()}
+      {renderCategoryPickerModal()}
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  gradient: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
-    padding: 16,
   },
   header: {
+    padding: 16,
+    backgroundColor: 'transparent',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
-    paddingHorizontal: 4,
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#1a1a1a',
-    flex: 1,
+    color: '#333333',
+  },
+  filterIconButton: {
+    padding: 8,
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    padding: 16,
+    backgroundColor: 'transparent',
+    borderBottomWidth: 0,
+    marginBottom: 20,
   },
   filterButton: {
-    backgroundColor: '#007AFF',
     paddingHorizontal: 16,
     paddingVertical: 8,
-    borderRadius: 12,
-    shadowColor: '#007AFF',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 3,
+    borderRadius: 20,
+    marginRight: 8,
+    backgroundColor: '#e0e7ff',
+    elevation: 1,
   },
-  filterButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  monthSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  monthButton: {
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#f0f0f0',
-  },
-  monthDisplay: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+  activeFilter: {
     backgroundColor: '#007AFF',
-    borderRadius: 8,
+    elevation: 2,
   },
-  monthText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  searchInput: {
-    backgroundColor: '#fff',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-    fontSize: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  summaryContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
-  },
-  summaryCard: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  summaryLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
+  filterText: {
+    fontSize: 15,
+    color: '#666666',
     fontWeight: '500',
   },
-  summaryValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
+  activeFilterText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
   },
-  transactionList: {
-    flex: 1,
+  listContainer: {
+    padding: 16,
   },
   transactionItem: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 18,
     marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 2,
   },
   transactionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   transactionDate: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: 15,
+    color: '#888',
     fontWeight: '500',
   },
   amount: {
@@ -760,47 +639,70 @@ const styles = StyleSheet.create({
     color: '#4CAF50',
   },
   transactionDetails: {
-    gap: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
   },
   bankContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    marginRight: 16,
   },
   bankText: {
     fontSize: 14,
     color: '#666',
-    fontWeight: '500',
+    marginLeft: 4,
   },
   recipientContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    marginRight: 16,
   },
   recipientText: {
     fontSize: 14,
-    color: '#1a1a1a',
-    fontWeight: '500',
+    color: '#666',
+    marginLeft: 4,
   },
   categoryContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
   },
   categoryText: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#1a1a1a',
+    fontWeight: 'bold',
+    marginLeft: 4,
   },
-  emptyContainer: {
-    flex: 1,
+  addButton: {
+    position: 'absolute',
+    right: 24,
+    bottom: 24,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#007AFF',
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: 32,
   },
   emptyText: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333333',
+    marginTop: 16,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#666666',
+    marginTop: 8,
     textAlign: 'center',
   },
   modalOverlay: {
@@ -861,9 +763,6 @@ const styles = StyleSheet.create({
   },
   filterButtonActive: {
     backgroundColor: '#007AFF',
-  },
-  filterButtonTextActive: {
-    color: '#fff',
   },
   closeButton: {
     backgroundColor: '#007AFF',
@@ -973,5 +872,42 @@ const styles = StyleSheet.create({
   },
   monthOptionTextSelected: {
     color: '#fff',
+  },
+  detailCard: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 28,
+    width: '92%',
+    alignSelf: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 4,
+    marginTop: 40,
+    marginBottom: 40,
+  },
+  detailIconRow: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  detailAmount: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#222',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  detailDivider: {
+    height: 1,
+    backgroundColor: '#E0E0E0',
+    marginVertical: 16,
+    borderRadius: 1,
+  },
+  copyButton: {
+    marginLeft: 8,
+    padding: 4,
+    borderRadius: 6,
+    backgroundColor: '#e0e7ff',
   },
 }); 
