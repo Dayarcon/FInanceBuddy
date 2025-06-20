@@ -1,11 +1,12 @@
-import { createTables, getAllTransactions, insertTransaction, Transaction } from './database';
+import { createTables, getAllTransactions, insertTransaction, getDBConnection } from './database';
 
 export const addTransaction = async (transaction: Transaction): Promise<number> => {
   await createTables();
   return await insertTransaction(transaction);
 };
 
-export const fetchTransactions = async (): Promise<Transaction[]> => {
+export const fetchTransactions = async (): Promise<any[]> => {
   await createTables();
-  return await getAllTransactions();
+  const db = getDBConnection();
+  return await getAllTransactions(db);
 };

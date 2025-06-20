@@ -1,6 +1,17 @@
 import { getDBConnection, executeQuery, insertRecord, checkDuplicate } from './database';
-import { Transaction, TransactionType, PaymentMethod } from '../types/transaction';
-import { SmsAndroid } from 'react-native-get-sms-android';
+// Inline types if not available
+type TransactionType = 'credit' | 'debit';
+type PaymentMethod = 'upi' | 'card' | 'bank_transfer' | 'cash' | 'unknown';
+type Transaction = {
+  amount: number;
+  date: string;
+  type: TransactionType;
+  paymentMethod: PaymentMethod;
+  recipient?: string | null;
+  source_sms?: string;
+};
+import SmsAndroid from 'react-native-get-sms-android';
+import { billService, Bill } from './BillService';
 
 type SMS = {
   body: string;
@@ -23,6 +34,7 @@ export const syncBillPaymentSMS = async (): Promise<boolean> => {
         try {
           const smsArray = JSON.parse(smsList);
           let transactionCount = 0;
+          let billCount = 0;
 
           for (const sms of smsArray) {
             try {
@@ -54,6 +66,27 @@ export const syncBillPaymentSMS = async (): Promise<boolean> => {
                 if (transactionId > 0) {
                   transactionCount++;
                   console.log(`Added transaction: ${transaction.type} ${transaction.amount} ${transaction.paymentMethod} ${transaction.recipient || 'unknown'}`);
+                  // Also add as Bill to BillService if not duplicate
+                  // Check for duplicate bill by amount, dueDate, and recipient
+                  const dueDate = new Date(transaction.date);
+                  const bills = await billService.getBills();
+                  const billExists = bills.some(bill =>
+                    bill.amount === transaction.amount &&
+                    bill.dueDate.getTime() === dueDate.getTime() &&
+                    bill.name === (transaction.recipient || 'Bill')
+                  );
+                  if (!billExists) {
+                    const newBill: Omit<Bill, 'id'> = {
+                      name: transaction.recipient || 'Bill',
+                      amount: transaction.amount,
+                      dueDate,
+                      isRecurring: false,
+                      category: 'Utilities',
+                      isPaid: false,
+                    };
+                    await billService.addBill(newBill);
+                    billCount++;
+                  }
                 }
               }
             } catch (error) {
@@ -61,7 +94,7 @@ export const syncBillPaymentSMS = async (): Promise<boolean> => {
             }
           }
 
-          console.log(`Sync completed. Added ${transactionCount} transactions`);
+          console.log(`Sync completed. Added ${transactionCount} transactions, ${billCount} bills`);
           resolve(true);
         } catch (error) {
           console.error('SMS sync error:', error);

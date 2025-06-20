@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ScrollView,
   StyleSheet,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 // @ts-ignore
 import { LinearGradient } from 'expo-linear-gradient';
+import { fetchTransactions } from '../services/transactionService';
 
 const HomeScreen = () => {
   const router = useRouter();
@@ -20,136 +21,108 @@ const HomeScreen = () => {
   // Placeholder for recent activity
   const recentActivity = [];
 
+  // 1. Accent color
+  const ACCENT = '#2563eb';
+
+  // 2. Stat cards (dynamic for transactions)
+  const [transactionCount, setTransactionCount] = useState(0);
+  useEffect(() => {
+    fetchTransactions().then(txns => setTransactionCount(txns.length));
+  }, []);
+  const statCards = [
+    { label: 'Total Balance', value: '₹0.00', icon: 'wallet', color: ACCENT },
+    { label: 'Bills', value: '0', icon: 'card', color: '#ef4444' },
+    { label: 'Transactions', value: transactionCount.toString(), icon: 'list', color: '#10b981' },
+  ];
+
+  const StatCard = ({ label, value, icon, color }) => (
+    <View style={{ backgroundColor: color + '11', borderRadius: 24, paddingVertical: 18, paddingHorizontal: 28, marginRight: 14, alignItems: 'center', minWidth: 120 }}>
+      <Ionicons name={icon} size={22} color={color} style={{ marginBottom: 6 }} />
+      <Text style={{ fontSize: 22, fontWeight: 'bold', color }}>{value}</Text>
+      <Text style={{ fontSize: 14, color: '#444', marginTop: 4 }}>{label}</Text>
+    </View>
+  );
+
+  // 3. Quick actions as horizontal pills
+  const quickActions = [
+    { label: 'View Bills', icon: 'card-outline', color: ACCENT, route: '/bills' },
+    { label: 'Overdue Bills', icon: 'warning-outline', color: '#ef4444', route: '/overdue-bills' },
+    { label: 'Add Bill', icon: 'add-circle-outline', color: '#10b981', route: '/add-bill' },
+    { label: 'Transactions', icon: 'list', color: ACCENT, route: '/transactions' },
+    { label: 'Add Transaction', icon: 'add', color: '#10b981', route: '/add-transaction' },
+    { label: 'Reports', icon: 'bar-chart', color: '#a21caf', route: '/reports' },
+    { label: 'Sync SMS', icon: 'sync', color: ACCENT, route: '/comprehensive-sync' },
+    { label: 'Credit Card Bills', icon: 'card', color: '#f59e42', route: '/credit-card-bills' },
+    { label: 'Credit Card Statements', icon: 'document-text', color: '#a21caf', route: '/credit-card-statements' },
+  ];
+
+  const ActionPill = ({ icon, label, color, onPress }) => (
+    <TouchableOpacity onPress={onPress} activeOpacity={0.85} style={{ backgroundColor: color + '11', borderRadius: 18, paddingHorizontal: 18, paddingVertical: 14, marginRight: 12, alignItems: 'center', flexDirection: 'row', minWidth: 120 }}>
+      <Ionicons name={icon} size={20} color={color} style={{ marginRight: 8 }} />
+      <Text style={{ color, fontWeight: '600', fontSize: 15 }}>{label}</Text>
+    </TouchableOpacity>
+  );
+
+  // 4. Emoji empty state for recent activity
+  const EmojiEmpty = ({ emoji, text, cta, onPress }) => (
+    <View style={{ alignItems: 'center', justifyContent: 'center', padding: 32 }}>
+      <Text style={{ fontSize: 48, marginBottom: 8 }}>{emoji}</Text>
+      <Text style={{ fontSize: 16, color: '#888', marginBottom: 12 }}>{text}</Text>
+      {cta && <TouchableOpacity style={{ backgroundColor: ACCENT, borderRadius: 16, paddingHorizontal: 24, paddingVertical: 12 }} onPress={onPress}><Text style={{ color: '#fff', fontWeight: '600', fontSize: 16 }}>{cta}</Text></TouchableOpacity>}
+    </View>
+  );
+
   return (
-    <ScrollView style={styles.container}>
-      <LinearGradient
-        colors={["#e0e7ff", "#fff"]}
-        style={styles.headerGradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      >
-        <View style={styles.headerContent}>
-          <View style={styles.avatarContainer}>
-            <Image
-              source={{ uri: 'https://i.pravatar.cc/100?img=3' }}
-              style={styles.avatar}
-            />
-            <View>
-              <Text style={styles.greeting}>Welcome back,</Text>
-              <Text style={styles.userName}>{userName}</Text>
-            </View>
+    <View style={{ flex: 1, backgroundColor: '#fff' }}>
+      {/* Header */}
+      <View style={{ paddingTop: 48, paddingBottom: 24, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Image source={{ uri: 'https://i.pravatar.cc/100?img=3' }} style={{ width: 48, height: 48, borderRadius: 24, marginRight: 14, borderWidth: 2, borderColor: '#fff' }} />
+          <View>
+            <Text style={{ fontSize: 16, color: '#888' }}>Welcome back,</Text>
+            <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#222' }}>{userName}</Text>
           </View>
-          <TouchableOpacity
-            style={styles.settingsButton}
-            onPress={() => router.push('/settings')}
-          >
-            <Ionicons name="settings-outline" size={28} color="#007AFF" />
-          </TouchableOpacity>
         </View>
-      </LinearGradient>
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Quick Actions</Text>
-        <View style={styles.quickActions}>
-          <Pressable
-            style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
-            onPress={() => router.push('/bills')}
-          >
-            <Ionicons name="card-outline" size={28} color="#007AFF" />
-            <Text style={styles.actionText}>View Bills</Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
-            onPress={() => router.push('/overdue-bills')}
-          >
-            <Ionicons name="warning-outline" size={28} color="#FF3B30" />
-            <Text style={styles.actionText}>Overdue Bills</Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
-            onPress={() => router.push('add-bill' as any)}
-          >
-            <Ionicons name="add-circle-outline" size={28} color="#4CAF50" />
-            <Text style={styles.actionText}>Add Bill</Text>
-          </Pressable>
-        </View>
-        <View style={styles.quickActions}>
-          <Pressable
-            style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
-            onPress={() => router.push('/transactions')}
-          >
-            <Ionicons name="list" size={28} color="#007AFF" />
-            <Text style={styles.actionText}>View Transactions</Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
-            onPress={() => router.push('/add-transaction')}
-          >
-            <Ionicons name="add" size={28} color="#4CAF50" />
-            <Text style={styles.actionText}>Add Transaction</Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
-            onPress={() => router.push('/reports')}
-          >
-            <Ionicons name="bar-chart" size={28} color="#9C27B0" />
-            <Text style={styles.actionText}>Reports</Text>
-          </Pressable>
-        </View>
-        <View style={styles.quickActions}>
-          <Pressable
-            style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
-            onPress={() => router.push('/comprehensive-sync')}
-          >
-            <Ionicons name="sync" size={28} color="#007AFF" />
-            <Text style={styles.actionText}>Sync SMS</Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
-            onPress={() => router.push('/credit-card-bills')}
-          >
-            <Ionicons name="card" size={28} color="#FF5722" />
-            <Text style={styles.actionText}>Credit Card Bills</Text>
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [styles.actionButton, pressed && styles.actionButtonPressed]}
-            onPress={() => router.push('/credit-card-statements')}
-          >
-            <Ionicons name="document-text" size={28} color="#9C27B0" />
-            <Text style={styles.actionText}>Credit Card Statements</Text>
-          </Pressable>
-        </View>
+        <TouchableOpacity onPress={() => router.push('/settings')} style={{ backgroundColor: ACCENT + '11', borderRadius: 16, padding: 10 }}>
+          <Ionicons name="settings-outline" size={26} color={ACCENT} />
+        </TouchableOpacity>
       </View>
-
-      <View style={styles.divider} />
-
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Recent Activity</Text>
-        <View style={styles.activityList}>
-          {recentActivity.length === 0 ? (
-            <>
-              <View style={styles.activityCardPlaceholder} />
-              <View style={styles.activityCardPlaceholder} />
-              <View style={styles.activityCardPlaceholder} />
-              <Text style={styles.emptyText}>No recent activity</Text>
-            </>
-          ) : (
-            // Map recentActivity to cards here
-            recentActivity.map((activity, idx) => (
-              <View key={idx} style={styles.activityCard}>
-                {/* Render activity details */}
-              </View>
-            ))
-          )}
-        </View>
-      </View>
-    </ScrollView>
+      {/* Stat Cards */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 18, paddingLeft: 16 }}>
+        {statCards.map((card) => (
+          <StatCard key={card.label} {...card} />
+        ))}
+      </ScrollView>
+      {/* Quick Actions */}
+      <Text style={{ fontSize: 18, fontWeight: '600', color: ACCENT, marginLeft: 18, marginBottom: 8 }}>Quick Actions</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 18, paddingLeft: 16 }}>
+        {quickActions.map((action) => (
+          <ActionPill key={action.label} icon={action.icon} label={action.label} color={action.color} onPress={() => router.push(action.route)} />
+        ))}
+      </ScrollView>
+      {/* Recent Activity */}
+      <Text style={{ fontSize: 18, fontWeight: '600', color: ACCENT, marginLeft: 18, marginBottom: 8 }}>Recent Activity</Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 18, paddingLeft: 16 }}>
+        {recentActivity.length === 0 ? (
+          <EmojiEmpty emoji="🕒" text="No recent activity" cta="Add Transaction" onPress={() => router.push('/add-transaction')} />
+        ) : (
+          recentActivity.map((activity, idx) => (
+            <View key={idx} style={{ backgroundColor: '#f3f4f6', borderRadius: 18, padding: 18, marginRight: 14, minWidth: 180, alignItems: 'flex-start' }}>
+              {/* Render activity details here */}
+            </View>
+          ))
+        )}
+      </ScrollView>
+      {/* Floating Action Button */}
+      <TouchableOpacity
+        style={{ position: 'absolute', right: 24, bottom: 32, width: 56, height: 56, borderRadius: 28, backgroundColor: ACCENT, justifyContent: 'center', alignItems: 'center', shadowColor: ACCENT, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.18, shadowRadius: 8, elevation: 8 }}
+        onPress={() => router.push('/add-transaction')}
+        activeOpacity={0.85}
+        accessibilityLabel="Add Transaction"
+      >
+        <Ionicons name="add" size={28} color="#fff" />
+      </TouchableOpacity>
+    </View>
   );
 };
 
